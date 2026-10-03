@@ -19,7 +19,7 @@ from web_monitor.history import HistoryService
 from web_monitor.models import MonitoredSite, Snapshot, SnapshotDiff, SnapshotItem
 
 
-def verify(env_file: Path) -> None:
+def verify(env_file: Path, *, inspect_site=None) -> None:
     config = ActivityInfoConfig.from_environment(env_file=env_file)
     with ActivityInfoClient(config) as client:
         store = ActivityInfoPersistence(client)
@@ -92,6 +92,8 @@ def verify(env_file: Path) -> None:
                     'Real recent Crawl ordering failed')
             require(len(service.recent_crawls(site_id, 2)) == 2, 'Real recent limit failed')
             print('All five historical queries passed against real ActivityInfo.', flush=True)
+            if inspect_site is not None:
+                inspect_site(site_id)
         finally:
             # Remove references before targets, and children before their parents.
             order = {'crawl':0, 'snapshot_item':1, 'snapshot':2, 'monitored_site':3}

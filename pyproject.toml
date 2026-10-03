@@ -22,3 +22,6 @@ dependencies = {file = ["requirements.txt"]}
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--import-mode=importlib"
+
+[tool.setuptools.package-data]
+web_monitor = ["templates/*.html", "static/*.css"]

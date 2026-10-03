@@ -1,7 +1,7 @@
 # Web Monitor
 
 A modern Python implementation inspired by the 2004 monitoring system.
-Includes a Flask skeleton, local monitoring engine, and ActivityInfo persistence.
+Includes a Flask web interface, local monitoring engine, and ActivityInfo history.
 
 ## Run locally
 
@@ -15,10 +15,15 @@ python -m pip install -e '.[test]'
 python main.py
 ```
 
-Open <http://127.0.0.1:8080/>. The response is
-`{"service":"web-monitor","status":"ok"}`. Stop the server with Ctrl-C.
-The Flask app and local engine need no credentials. ActivityInfo commands below
-load the project-root `.env` explicitly; existing environment variables take precedence.
+For the real web interface, configure the existing development ActivityInfo database
+and token in the ignored project-root `.env` (see `.env.example` and bootstrap below).
+Open <http://127.0.0.1:8080/> to choose a Monitored Site, inspect recent Crawls,
+view state or changes on a date, compare dates, and view the latest change.
+Historical dates are UTC; GET result URLs can be bookmarked. Stop with Ctrl-C.
+
+`/health` returns `{"service":"web-monitor","status":"ok"}` without credentials.
+Offline tests and the local engine also need no credentials. The real UI and
+ActivityInfo commands load `.env` explicitly; environment variables take precedence.
 
 ## Verify
 
@@ -116,8 +121,8 @@ test records. It leaves the site configuration intact:
 python -m web_monitor.activityinfo.verify_lifecycle <monitored-site-record-id>
 ```
 
-Deployment, scheduling, reports, notifications, and the historical query UI
-are not implemented.
+Deployment, scheduling, reports, and notifications are not implemented.
+The web interface is read-only; monitoring remains developer-triggered.
 
 ## Historical queries (Stage 4)
 
@@ -137,3 +142,11 @@ successful observation through each UTC date, including unchanged observations.
 Run offline coverage with `python -m pytest`. The explicit development checkpoint
 `python -m web_monitor.activityinfo.verify_history` writes synthetic history,
 verifies all five queries, and deletes its generated records, preserving the seeds.
+
+## Web interface verification (Stage 5)
+
+Run `python -m pytest` for offline route/template and regression tests. With the
+development `.env` configured, `python -m web_monitor.activityinfo.verify_web`
+starts a temporary local Flask server, verifies the four seeded sites and history
+pages using synthetic records, then cleans up those records. It leaves the seeded
+site configurations unchanged. No web route creates records or triggers crawls.

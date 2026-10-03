@@ -1,0 +1,16 @@
+{% macro stamp(value) -%}<time datetime="{{ value.isoformat() }}">{{ value.strftime('%Y-%m-%d %H:%M:%S') }} UTC</time>{%- endmacro %}
+{% macro item_link(item) -%}<a href="{{ item.canonical_url }}" rel="noreferrer">{{ item.canonical_url }}</a>{%- endmacro %}
+{% macro summary(diff) -%}<p class="counts"><strong>{{ diff.added|length }}</strong> added <span>·</span> <strong>{{ diff.removed|length }}</strong> removed <span>·</span> <strong>{{ diff.changed|length }}</strong> changed</p>{%- endmacro %}
+{% macro details(diff) %}
+{{ summary(diff) }}
+{% if not diff.added and not diff.removed and not diff.changed %}<p class="empty">No differences between these states.</p>{% endif %}
+{% for label, items in [('Added', diff.added), ('Removed', diff.removed)] %}
+<section><h3>{{ label }}</h3>{% if items %}<ul class="items">{% for item in items %}<li>{{ item_link(item) }}<span class="item-title">{{ item.title or 'Untitled' }}</span></li>{% endfor %}</ul>{% else %}<p class="muted">None.</p>{% endif %}</section>
+{% endfor %}
+<section><h3>Changed</h3>{% for change in diff.changed %}
+<article class="change"><h4>{{ item_link(change.new) }}</h4><dl><dt>Old title</dt><dd>{{ change.old.title or 'Untitled' }}</dd><dt>Old hash</dt><dd><code>{{ change.old.content_hash }}</code></dd><dt>New title</dt><dd>{{ change.new.title or 'Untitled' }}</dd><dt>New hash</dt><dd><code>{{ change.new.content_hash }}</code></dd></dl></article>
+{% else %}<p class="muted">None.</p>{% endfor %}</section>
+{% endmacro %}
+{% macro transition(result) %}
+<article class="panel"><h2>{{ stamp(result.crawl.crawled_at) }}</h2><p class="muted">Snapshot <code>{{ result.crawl.previous_snapshot_reference }}</code> → <code>{{ result.crawl.snapshot_reference }}</code></p>{{ details(result.diff) }}</article>
+{% endmacro %}

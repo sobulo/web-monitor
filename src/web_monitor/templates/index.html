@@ -1,0 +1,8 @@
+{% extends 'base.html' %}
+{% block title %}Monitored Sites{% endblock %}
+{% block content %}
+<h1>Monitored Sites</h1><p class="intro">Choose a Monitored Site to explore its observed states and recorded changes.</p>
+<div class="site-grid">{% for site in sites %}
+<article class="panel"><span class="badge">{{ 'Active' if site.active else 'Inactive' }}</span><h2><a href="{{ url_for('overview', site_id=site.record_id) }}">{{ site.name }}</a></h2><p class="url">{{ site.site.root_url }}</p><a href="{{ url_for('overview', site_id=site.record_id) }}">Open site history <span aria-hidden="true">→</span></a></article>
+{% else %}<p class="empty">No Monitored Sites are available yet.</p>{% endfor %}</div>
+{% endblock %}

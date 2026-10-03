@@ -3,13 +3,13 @@
 from web_monitor.app import create_app
 
 
-def test_home_returns_service_status():
+def test_health_returns_service_status():
     """The application starts without credentials and serves JSON."""
     app = create_app()
     app.config["TESTING"] = True
 
     with app.test_client() as client:
-        response = client.get("/")
+        response = client.get("/health")
 
     assert response.status_code == 200
     assert response.is_json

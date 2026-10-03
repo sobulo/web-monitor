@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import stamp, summary %}
+{% block title %}{{ site.name }}{% endblock %}
+{% block content %}
+<h1>{{ site.name }}</h1><p><a href="{{ site.site.root_url }}" rel="noreferrer">{{ site.site.root_url }}</a></p>
+<dl class="metadata"><div><dt>Status</dt><dd>{{ 'Active' if site.active else 'Inactive' }}</dd></div><div><dt>Crawl depth</dt><dd>{{ site.site.crawl_depth }}</dd></div><div><dt>Schedule</dt><dd>{{ site.schedule }}</dd></div></dl>
+<section class="panel"><h2>Latest change</h2>{% if latest %}<p>{{ stamp(latest.crawl.crawled_at) }}</p>{{ summary(latest.diff) }}<a href="{{ url_for('latest_change', site_id=site.record_id) }}">View change details</a>{% else %}<p>No change recorded yet.</p>{% endif %}</section>
+<section><h2>Recent crawl history</h2><p class="muted">Most recent 20 observations, newest first. Times are UTC.</p>
+{% if crawls %}<div class="table-scroll" tabindex="0" role="region" aria-label="Recent crawl history"><table><thead><tr><th scope="col">Timestamp (UTC)</th><th scope="col">Status</th><th scope="col">Pages</th><th scope="col">Added</th><th scope="col">Removed</th><th scope="col">Changed</th><th scope="col">Error summary</th></tr></thead><tbody>
+{% for crawl in crawls %}<tr><td>{{ stamp(crawl.crawled_at) }}</td><td><span class="badge status-{{ crawl.status }}">{{ crawl.status }}</span></td><td>{{ crawl.pages_crawled }}</td><td>{{ crawl.added_count }}</td><td>{{ crawl.removed_count }}</td><td>{{ crawl.changed_count }}</td><td>{{ crawl.error_message or '—' }}</td></tr>{% endfor %}
+</tbody></table></div>{% else %}<p class="empty">No Crawls recorded yet.</p>{% endif %}</section>
+{% endblock %}

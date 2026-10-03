@@ -10,7 +10,7 @@ classes use `CapWords`, and constants use `UPPER_CASE`.
 `crawler.crawl_site(MonitoredSite(...))` fetches and normalizes pages into an
 in-memory `Snapshot`. `diff.compare_snapshots(old, new)` produces a
 `SnapshotDiff`. Domain values, normalization, crawling, and comparison are
-independent of Flask. The Stage 0 Flask factory and JSON endpoint remain intact.
+independent of Flask. The Flask factory remains; the original JSON smoke response is served at `/health`.
 
 - **Monitored site:** root URL, nonnegative maximum crawl depth, allowed hostname,
   and an explicit option to include that domain's subdomains. The root must match.
@@ -157,3 +157,22 @@ Conflicting tied states or tied change events raise an explicit integrity error;
 record IDs do not establish causal order. Queries assume serial monitoring and
 immutable completed observations; concurrent edits are not transactionally isolated.
 No schema/domain changes or Flask UI are introduced.
+
+## Web presentation (Stage 5)
+
+Flask/Jinja renders a read-only Monitored Site directory, overview, and historical
+query pages. Routes use the site directory abstraction and `HistoryService`;
+ActivityInfo HTTP, formulas, record decoding, crawling, and diff logic stay outside
+presentation. Ordinary GET forms and HTML5 date inputs produce bookmarkable
+results. Calendar dates and displayed Crawl times are UTC.
+
+`create_app` constructs without credentials. Tests inject `WebServices` or a
+context-manager factory. Real requests lazily compose configuration, client,
+persistence, and query service; teardown closes the client. Health and static
+requests need no external services. Error pages and logs exclude exception text
+and raw upstream responses. Templates autoescape stored text.
+
+The recent-history table reads metadata only; the overview's separate latest-change
+summary reconstructs that transition's two Snapshots via the query service.
+No routes mutate records or trigger monitoring. ActivityInfo reporting remains
+Stage 6; deployment, scheduling, and authentication are outside this stage.

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Web Monitor{% endblock %} · Web Monitor</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header><div class="container"><a class="brand" href="{{ url_for('index') }}">Web Monitor</a><span class="tagline">Website history, observed over time</span></div></header>
+<main id="main" class="container">
+  <nav aria-label="Breadcrumb"><a href="{{ url_for('index') }}">Monitored Sites</a>{% if site is defined %} <span aria-hidden="true">/</span> <a href="{{ url_for('overview', site_id=site.record_id) }}">{{ site.name }}</a>{% endif %}</nav>
+  {% if site is defined %}
+  <nav class="tabs" aria-label="Site navigation">
+    <a href="{{ url_for('overview', site_id=site.record_id) }}">Overview</a>
+    <a href="/sites/{{ site.record_id }}/state">State on date</a>
+    <a href="/sites/{{ site.record_id }}/changes-on">Changes on date</a>
+    <a href="/sites/{{ site.record_id }}/compare">Compare dates</a>
+    <a href="{{ url_for('latest_change', site_id=site.record_id) }}">Latest change</a>
+  </nav>
+  {% endif %}
+  {% block content %}{% endblock %}
+</main>
+<footer class="container">Historical dates are interpreted in UTC. Monitoring is run separately from this read-only interface.</footer>
+</body>
+</html>

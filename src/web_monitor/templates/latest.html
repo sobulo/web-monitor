@@ -1,0 +1,4 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import transition %}
+{% block title %}Latest change · {{ site.name }}{% endblock %}
+{% block content %}<h1>Latest change</h1><p class="intro">{{ site.name }}</p>{% if latest %}{{ transition(latest) }}{% else %}<p class="empty">No change recorded yet.</p>{% endif %}{% endblock %}

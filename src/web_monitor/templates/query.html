@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import stamp, item_link, details, transition %}
+{% set heading = {'state':'State on date', 'changes-on':'Changes on date', 'compare':'Compare dates'}[mode] %}
+{% block title %}{{ heading }} · {{ site.name }}{% endblock %}
+{% block content %}
+<h1>{{ heading }}</h1><p class="intro">{{ site.name }}</p>
+<form method="get"><p id="date-note">Historical dates are interpreted in UTC.</p><div class="form-row">
+{% for name in (['start','end'] if mode == 'compare' else ['date']) %}<div><label for="{{ name }}">{{ {'start':'Start date','end':'End date','date':'Date'}[name] }}</label><input type="date" id="{{ name }}" name="{{ name }}" value="{{ request.args.get(name, '') }}" aria-describedby="date-note" required></div>{% endfor %}<button type="submit">{{ 'Compare states' if mode == 'compare' else 'View history' }}</button></div></form>
+{% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+{% if result is not none %}
+{% if mode == 'state' %}
+<h2>State through {{ result.requested_date }} (UTC)</h2>
+{% if result.available %}<p>Observed {{ stamp(result.crawl.crawled_at) }} · <strong>{{ result.snapshot.items|length }}</strong> Snapshot items</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Snapshot items"><table><thead><tr><th scope="col">Canonical URL</th><th scope="col">Title</th><th scope="col">Content hash</th></tr></thead><tbody>{% for item in result.snapshot.items %}<tr><td>{{ item_link(item) }}</td><td>{{ item.title or 'Untitled' }}</td><td><code>{{ item.content_hash }}</code></td></tr>{% endfor %}</tbody></table></div>
+{% else %}<p class="empty">No state available on or before this date.</p>{% endif %}
+{% elif mode == 'changes-on' %}
+<h2>Changes on {{ values.date }} (UTC)</h2>{% for change in result %}{{ transition(change) }}{% else %}<p class="empty">No changes recorded on this date.</p>{% endfor %}
+{% else %}
+<h2>Endpoint state comparison</h2><p>This compares the states at the end of each selected UTC date.</p>
+{% for label, state in [('Start',result.start),('End',result.end)] %}<p><strong>{{ label }}: {{ state.requested_date }}</strong> — {% if state.available %}observed {{ stamp(state.crawl.crawled_at) }}{% else %}No state available for {{ label|lower }} date.{% endif %}</p>{% endfor %}
+{% if result.diff is not none %}{{ details(result.diff) }}{% endif %}
+{% endif %}
+{% endif %}
+{% endblock %}
