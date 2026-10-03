@@ -1,7 +1,7 @@
 # Web Monitor
 
 A modern Python implementation inspired by the 2004 monitoring system.
-Includes the Stage 0 Flask skeleton and Stage 1 local, in-memory monitoring engine.
+Includes a Flask skeleton, local monitoring engine, and ActivityInfo persistence.
 
 ## Run locally
 
@@ -17,8 +17,8 @@ python main.py
 
 Open <http://127.0.0.1:8080/>. The response is
 `{"service":"web-monitor","status":"ok"}`. Stop the server with Ctrl-C.
-No credentials or `.env` file are required. `.env.example` lists placeholders
-for future integrations; the application does not load it or `.env`.
+The Flask app and local engine need no credentials. ActivityInfo commands below
+load the project-root `.env` explicitly; existing environment variables take precedence.
 
 ## Verify
 
@@ -58,5 +58,39 @@ python -m pytest
 The fixtures run on an ephemeral local HTTP server. No internet or credentials
 are required to run the tests; the full suite includes the Stage 0 Flask smoke test.
 
-ActivityInfo integration, persistence, cloud deployment, scheduling, reports,
-and the historical query UI are not implemented.
+## ActivityInfo bootstrap (Stage 2)
+
+Use an **existing development database**. From this project root, set
+`ACTIVITYINFO_API_TOKEN` and `ACTIVITYINFO_DATABASE_ID` in the ignored `.env`
+(using `.env.example` as a guide), then run with the virtual environment active:
+
+```sh
+python -m pip install -e '.[test]'
+python -m web_monitor.activityinfo.bootstrap
+```
+
+Bootstrap creates/verifies the application forms inside that database and seeds
+four demo site configurations. It never creates a database or crawls the sites.
+Rerunning it adds only missing schema/seed records; incompatible objects stop it.
+Run bootstrap serially, not concurrently. Never share or commit `.env`.
+
+Offline tests require no ActivityInfo credentials:
+
+```sh
+python -m pytest
+```
+
+The explicit **development-only** integration checkpoint bootstraps twice, checks
+for duplicates, writes/reads synthetic Snapshot, child items, and Crawl records,
+then deletes only those generated test records:
+
+```sh
+python -m web_monitor.activityinfo.verify_persistence
+```
+
+It prints generated test record IDs so interrupted checks can be inspected.
+Both commands accept `--env-file /absolute/path/to/.env`. The token is never
+included in command output. Do not run the checkpoint against production data.
+
+Automatic crawl/persist lifecycle, deployment, scheduling, reports, and the
+historical query UI are not implemented.
