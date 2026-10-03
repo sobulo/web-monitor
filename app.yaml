@@ -1,0 +1,3 @@
+# Configuration for a future App Engine Standard deployment.
+runtime: python311
+entrypoint: gunicorn --pythonpath src --bind :$PORT main:app
