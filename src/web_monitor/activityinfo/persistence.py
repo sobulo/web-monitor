@@ -311,3 +311,18 @@ class ActivityInfoPersistence:
             count(values["changed_count"]), count(values["pages_crawled"]),
             values["error_message"],
         )
+
+    def list_crawls(self, monitored_site_id: str) -> tuple[CrawlRecord, ...]:
+        """Read one site's metadata only; temporal selection belongs to history."""
+        resource_id(monitored_site_id)
+        rows = self.client.query_rows(
+            self.ids["crawl"], {"record_id": "_id"},
+            filter_formula=f"monitored_site._id == {json.dumps(monitored_site_id)}",
+        )
+        ids = [resource_id(row.get("record_id")) for row in rows]
+        if len(ids) != len(set(ids)):
+            raise PersistenceError("Duplicate Crawl IDs in query")
+        records = tuple(self.read_crawl(record_id) for record_id in sorted(ids))
+        if any(record.monitored_site_id != monitored_site_id for record in records):
+            raise PersistenceError("Crawl belongs to a different monitored site")
+        return records

@@ -118,3 +118,22 @@ python -m web_monitor.activityinfo.verify_lifecycle <monitored-site-record-id>
 
 Deployment, scheduling, reports, notifications, and the historical query UI
 are not implemented.
+
+## Historical queries (Stage 4)
+
+With the existing development `.env` and virtual environment active, query a
+Monitored Site record ID. Dates are UTC; commands are read-only:
+
+```sh
+python -m web_monitor.history state <site-id> 2026-09-16
+python -m web_monitor.history changes-on <site-id> 2026-09-17
+python -m web_monitor.history changes-between <site-id> 2026-09-14 2026-09-19
+python -m web_monitor.history latest-change <site-id>
+python -m web_monitor.history recent <site-id> --limit 20
+```
+
+Missing state or changes are reported explicitly. Date comparisons use the last
+successful observation through each UTC date, including unchanged observations.
+Run offline coverage with `python -m pytest`. The explicit development checkpoint
+`python -m web_monitor.activityinfo.verify_history` writes synthetic history,
+verifies all five queries, and deletes its generated records, preserving the seeds.

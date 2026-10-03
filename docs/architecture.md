@@ -132,3 +132,28 @@ Controlled local fixtures prove `initial → no_change → changed → no_change
 The separate real-development checkpoint invokes the manual command twice,
 checks persisted state/references, and removes only its generated test records.
 Scheduling, deployment, reports, notifications, and query UI remain out of scope.
+
+## Historical queries (Stage 4)
+
+`HistoryService` selects observations from Crawl history and reconstructs distinct
+Snapshots through the persistence boundary. Results contain domain snapshots,
+structured diffs, and opaque references; consumers need no ActivityInfo formulas.
+State on a date is the latest successful Crawl through that entire UTC calendar
+date. Error Crawls never replace the last successful state. No successful Crawl
+means an explicit unavailable state, not an empty or fabricated Snapshot.
+
+Only `changed` Crawls are transitions. Each transition reconstructs both states,
+uses the Stage 1 diff engine, and verifies stored counts against its result.
+Between-date queries directly compare the two end-of-day states, never accumulated
+transition counts. Missing endpoints are identified. Latest change excludes the
+initial baseline. Recent history includes every status and loads no child items.
+
+The adapter filters Crawl reads by site, then retrieves typed Crawl metadata.
+The service parses/compares aware instants in UTC; timestamp text is never sorted
+lexically. This currently reads a site's full Crawl metadata (with individual
+record reads) for correctness; it does not scan other sites or preload Snapshots.
+Equal timestamps use record reference ordering for listings and same-state ties.
+Conflicting tied states or tied change events raise an explicit integrity error;
+record IDs do not establish causal order. Queries assume serial monitoring and
+immutable completed observations; concurrent edits are not transactionally isolated.
+No schema/domain changes or Flask UI are introduced.

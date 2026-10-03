@@ -160,3 +160,26 @@ def test_latest_incomplete_snapshot_is_not_ignored(api, schemas, record_response
     api.expect("POST", "/query/rows", [])
     with pytest.raises(PersistenceError, match="Incomplete"):
         store.load_latest_snapshot("site1")
+
+
+def test_list_crawls_scoped_metadata_only(api, schemas, record_response):
+    store = ActivityInfoPersistence(api.client, schemas)
+    api.expect("POST", "/query/rows", [{"record_id": "crawl1"}])
+    api.expect("GET", f"/form/{schemas['crawl']['id']}/record/crawl1", record_response("crawl", "crawl1", {
+        "monitored_site": schemas['monitored_site']['id'] + ':site1',
+        "crawled_at": '2026-09-14T23:59:59.999999Z', 'status': ['initial'],
+        'snapshot': schemas['snapshot']['id'] + ':snapshot1', 'previous_snapshot': None,
+        'added_count': 0, 'removed_count': 0, 'changed_count': 0, 'pages_crawled': 1,
+    }))
+    records = store.list_crawls('site1')
+    assert records[0].snapshot_id == 'snapshot1'
+    assert records[0].crawled_at.microsecond == 999999
+    assert api.calls[0].body['filter'] == 'monitored_site._id == "site1"'
+    assert len(api.calls) == 2
+
+
+def test_list_crawls_rejects_duplicates(api, schemas):
+    store = ActivityInfoPersistence(api.client, schemas)
+    api.expect('POST', '/query/rows', [{'record_id': 'crawl1'}] * 2)
+    with pytest.raises(PersistenceError, match='Duplicate Crawl'):
+        store.list_crawls('site1')
