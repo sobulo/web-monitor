@@ -1,7 +1,7 @@
 # Web Monitor
 
 A modern Python implementation inspired by the 2004 monitoring system.
-Stage 0 establishes the application and project contract only.
+Includes the Stage 0 Flask skeleton and Stage 1 local, in-memory monitoring engine.
 
 ## Run locally
 
@@ -33,7 +33,7 @@ python -c "import web_monitor; from web_monitor.app import create_app; print(cre
 
 - `src/web_monitor/`: installed application package and Flask factory.
 - `main.py`: local development and WSGI entry point.
-- `tests/`: HTTP smoke test.
+- `tests/`: Flask smoke test and controlled local monitoring fixtures/tests.
 - `requirements.txt`: runtime dependencies, also read by `pyproject.toml`.
 - `app.yaml`: future App Engine Standard runtime and Gunicorn entry point.
 - `.gcloudignore`: upload exclusions, including local environments and secrets.
@@ -45,5 +45,18 @@ App Engine installs runtime dependencies from `requirements.txt`.
 See Google's [Python runtime documentation](https://docs.cloud.google.com/appengine/docs/standard/python3/runtime).
 No cloud resources are created or deployed in Stage 0.
 
-Crawling, ActivityInfo integration, persistence, change detection, reports,
-and scheduling are planned work and are not implemented here.
+## Stage 1 tests
+
+With the virtual environment active, install the test dependencies and run:
+
+```sh
+python -m pip install -e '.[test]'
+python -m pytest tests/test_crawler.py tests/test_normalization.py tests/test_diff.py tests/test_urls.py
+python -m pytest
+```
+
+The fixtures run on an ephemeral local HTTP server. No internet or credentials
+are required to run the tests; the full suite includes the Stage 0 Flask smoke test.
+
+ActivityInfo integration, persistence, cloud deployment, scheduling, reports,
+and the historical query UI are not implemented.

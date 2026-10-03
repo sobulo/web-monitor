@@ -1,47 +1,62 @@
 # Architecture and project contract
 
 Web Monitor is a modern Python implementation inspired by the 2004 monitoring
-system, not a line-for-line Perl port. Historical behavior can inform future
-requirements; the implementation will use simple Python components and explicit
-boundaries.
+system, not a line-for-line Perl port. The repository is `web-monitor`; the
+package is `web_monitor`. Modules, functions, and variables use `snake_case`,
+classes use `CapWords`, and constants use `UPPER_CASE`.
 
-## Stage 0
+## Local engine (Stage 1)
 
-The only executable behavior is a Flask application with a JSON smoke endpoint.
-The application factory in `web_monitor.app` constructs it without credentials,
-network calls, or cloud SDKs. `main.py` exposes the WSGI application and starts
-the local development server when run directly.
+`crawler.crawl_site(MonitoredSite(...))` fetches and normalizes pages into an
+in-memory `Snapshot`. `diff.compare_snapshots(old, new)` produces a
+`SnapshotDiff`. Domain values, normalization, crawling, and comparison are
+independent of Flask. The Stage 0 Flask factory and JSON endpoint remain intact.
 
-The repository is `web-monitor`; the import package is `web_monitor`.
-Modules, functions, and variables use `snake_case`, classes use `CapWords`, and
-constants use `UPPER_CASE`, following normal Python/Google Python conventions.
+- **Monitored site:** root URL, nonnegative maximum crawl depth, allowed hostname,
+  and an explicit option to include that domain's subdomains. The root must match.
+- **Crawl:** one breadth-first observation attempt. Root depth is zero. Relative
+  anchor links resolve against the fetched URL. Only HTTP/HTTPS links within the
+  hostname restriction are followed; ports do not affect hostname matching.
+  Subdomains require opt-in and a dot boundary. No JavaScript or browser runs.
+- **Snapshot item/state:** canonical URL, optional title, and SHA-256 of normalized
+  UTF-8 text. A snapshot is an immutable, URL-sorted collection with unique URLs.
+  Repeated crawls can yield the same state; an observation is not inherently a
+  distinct state. No historical storage or record identifiers are introduced.
+- **Diff:** URL-only membership determines additions/removals. Different hashes
+  at the same URL produce a change retaining both items; equal hashes are omitted.
+  Every category is sorted by URL. Comparing against an empty snapshot reports
+  every observed item as added.
 
-## Planned concepts
+## Fetching and normalization rules
 
-- **Monitored site:** a configured website or URL whose state should be observed.
-- **Crawl:** one observation attempt for a monitored site, with its own timing,
-  outcome, and eventual reference to the observed state. A failed crawl must not
-  imply that the site changed.
-- **Distinct snapshot/state:** a representation of observed content after an
-  explicitly defined normalization step. Repeated crawls may observe the same
-  state; a crawl and a distinct snapshot are separate concepts.
-- **Change detection:** comparison of successful observations against a prior
-  state to determine meaningful differences. Normalization, equality rules,
-  first-observation behavior, and storage choices remain future design decisions.
+URL identity resolves relative references, lowercases the host, removes default
+ports and fragments, and gives an empty path `/`. Paths and query ordering remain
+significant. Credential-bearing URLs are rejected. Each canonical URL is fetched
+at most once per crawl. Redirects retain depth, check domain restrictions before
+fetching, and have a ten-hop limit; snapshot items use the final URL.
 
-These concepts are a design contract, not implemented models or services.
+Requests sends `Web-Monitor/0.1`, with a configurable finite positive timeout
+(default ten seconds for connection/read inactivity, not a whole-crawl deadline).
+Environment proxies and `.netrc` authentication are disabled. HTTP failures,
+timeouts, invalid/out-of-scope redirects, redirect loops, or non-HTML responses
+raise `CrawlError`. No partial snapshot is returned to imply false removals.
+
+Beautiful Soup's standard-library HTML parser removes scripts, styles, and
+inert templates. Comments and attributes contribute no text. Entities are decoded,
+text nodes are separated by spaces, and whitespace is collapsed. Title and link
+labels contribute text; letter case, punctuation, and Unicode are preserved.
+Link destinations alone do not change a page's hash. CSS visibility, semantic
+extraction, HTML base elements, and canonical-link metadata are not interpreted.
+An explicit HTTP charset is honored; otherwise the parser detects HTML encoding.
+
+Tests serve two checked-in HTML states through an ephemeral loopback HTTP server.
+They require no internet, external services, or credentials.
 
 ## Integration boundaries
 
-Future domain logic should remain independent of Flask request handling and
-external services. HTTP routes will invoke application operations. Future
-ActivityInfo and cloud adapters will handle external APIs, credentials, and
-storage behind explicit interfaces, without embedding those concerns in core
-monitoring logic. Introduce those interfaces when the functionality is built.
-
-Local startup and tests must continue to work without ActivityInfo or a cloud
-account. `app.yaml` and `requirements.txt` prepare a future App Engine deployment;
-they do not provision resources. `.env.example` contains placeholders only.
-
-Stage 0 excludes crawling, ActivityInfo integration, persistence, cloud
-deployment, reports, and scheduling. Do not begin Stage 1 as part of this work.
+`main.py` exposes the Flask WSGI application. Future routes may call domain
+operations; future ActivityInfo/cloud adapters must keep APIs, credentials, and
+storage concerns outside the domain. Introduce those interfaces when needed.
+`app.yaml` is unchanged future-deployment configuration only. Stage 1 implements
+no ActivityInfo integration, persistence, cloud deployment, scheduling, reports,
+or historical query UI.
