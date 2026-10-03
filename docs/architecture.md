@@ -75,8 +75,8 @@ current/previous Snapshots; its status vocabulary is `initial`, `no_change`,
 `changed`, and `error`. Snapshot references Monitored Site. Snapshot Item is a
 real child/subform: Snapshot's `items` field creates it, its schema identifies
 Snapshot as `parentFormId`, and child records carry `parentRecordId`.
-Crawl and Snapshot remain separate: later unchanged crawls will reference an
-existing distinct Snapshot. This stage does not choose or persist that lifecycle.
+Crawl and Snapshot remain separate; unchanged crawls reference the existing
+distinct Snapshot. The Stage 3 service below owns the lifecycle.
 
 Booleans use single selections (`true`/`false`), status uses a single selection,
 counts use quantities, and timestamps use ISO-8601 UTC text to preserve time of
@@ -98,4 +98,37 @@ API contracts follow the official [schema API](https://www.activityinfo.org/supp
 and [query API](https://www.activityinfo.org/support/docs/api/reference/queryRows.html).
 Schema rejection stops work; it never triggers a replacement model.
 
-Stage 3 lifecycle, scheduling, deployment, reports, and query UI remain out of scope.
+## Monitoring lifecycle (Stage 3)
+
+`MonitoringService` loads one site's configuration and reconstructs its latest
+persisted Snapshot through the adapter. Lookup filters by site, parses timestamps,
+and orders by `effective_from`, then `created_at`, then record ID for ties. Missing
+history establishes a baseline; malformed/incomplete history stops the run. The
+service invokes the existing crawler and `diff.compare_snapshots`; domain objects
+remain storage-independent. Flask and the HTTP client do not orchestrate runs.
+
+Every completed monitoring attempt writes a Crawl:
+
+- `initial`: create a complete baseline Snapshot/items; all diff counts are zero.
+- `no_change`: create only a Crawl, pointing both references to the existing Snapshot.
+- `changed`: create one complete new Snapshot/items; Crawl links old and new states
+  and records the existing diff engine's counts.
+- `error`: crawler failure creates no Snapshot; Crawl references the prior state
+  only through `previous_snapshot`, with zero counts/pages and a sanitized error.
+
+`crawled_at` marks the attempt's start. A new Snapshot's `effective_from` uses
+that attempt time; `created_at` is taken immediately before persistence.
+Unchanged runs never rewrite Snapshot timestamps or items. Error descriptions use
+allowlisted failure categories and HTTP status codes, excluding raw exception
+text, URLs, headers, and configuration.
+
+The developer command is `python -m web_monitor.monitor <site-id>`. Attempts must
+run serially per site; concurrency control is not implemented. ActivityInfo
+writes remain non-atomic: storage failures propagate and must not be reported as
+successful or as crawl failures. An interrupted write needs inspection before
+retrying, and unavailable storage cannot guarantee a Crawl record.
+
+Controlled local fixtures prove `initial → no_change → changed → no_change → error`.
+The separate real-development checkpoint invokes the manual command twice,
+checks persisted state/references, and removes only its generated test records.
+Scheduling, deployment, reports, notifications, and query UI remain out of scope.

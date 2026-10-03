@@ -253,6 +253,36 @@ class ActivityInfoPersistence:
             raise PersistenceError("Incomplete Snapshot: child count differs from item_count")
         return StoredSnapshot(record, Snapshot(tuple(child.item for child in items)), items)
 
+    def load_latest_snapshot(self, monitored_site_id: str) -> StoredSnapshot | None:
+        """Reconstruct the latest distinct state for exactly one monitored site.
+
+        Parse timestamps before ordering (text ordering mishandles offsets and
+        fractional seconds). Never fall back past an incomplete/corrupt latest state.
+        """
+        resource_id(monitored_site_id)
+        rows = self.client.query_rows(
+            self.ids["snapshot"],
+            {"record_id": "_id", "effective_from": "effective_from",
+             "created_at": "created_at"},
+            filter_formula=f"monitored_site._id == {json.dumps(monitored_site_id)}",
+        )
+        if not rows:
+            return None
+        candidates = [
+            (read_timestamp(row.get("effective_from")),
+             read_timestamp(row.get("created_at")), resource_id(row.get("record_id")))
+            for row in rows
+        ]
+        if len({candidate[2] for candidate in candidates}) != len(candidates):
+            raise PersistenceError("Duplicate Snapshot IDs in query")
+        effective_from, created_at, record_id = max(candidates)
+        stored = self.load_snapshot(record_id)
+        if stored.record.monitored_site_id != monitored_site_id:
+            raise PersistenceError("Latest Snapshot belongs to a different monitored site")
+        if (stored.record.effective_from, stored.record.created_at) != (effective_from, created_at):
+            raise PersistenceError("Snapshot metadata changed during prior-state lookup")
+        return stored
+
     def create_crawl(self, record: CrawlRecord) -> None:
         if record.status not in STATUS_VALUES:
             raise PersistenceError("Invalid Crawl status")

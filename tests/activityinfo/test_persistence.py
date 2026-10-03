@@ -106,3 +106,57 @@ def test_invalid_records_fail_before_writing(api, schemas):
 def test_invalid_counts(value):
     with pytest.raises(PersistenceError):
         count(value)
+
+
+def test_latest_snapshot_none_filters_by_site(api, schemas):
+    store = ActivityInfoPersistence(api.client, schemas)
+    api.expect("POST", "/query/rows", [])
+    assert store.load_latest_snapshot("site1") is None
+    assert api.calls[-1].body["filter"] == 'monitored_site._id == "site1"'
+
+
+def test_latest_snapshot_reconstructs_items_and_orders_parsed_timestamps(api, schemas, record_response):
+    store = ActivityInfoPersistence(api.client, schemas)
+    api.expect("POST", "/query/rows", [
+        {"record_id": "older", "effective_from": "2026-10-03T14:00:00+02:00", "created_at": timestamp(NOW)},
+        {"record_id": "latest", "effective_from": "2026-10-03T12:00:00.100000Z", "created_at": "2026-10-03T12:00:01Z"},
+    ])
+    api.expect("GET", f"/form/{schemas['snapshot']['id']}/record/latest", record_response("snapshot", "latest", {
+        "monitored_site": schemas["monitored_site"]["id"] + ":site1",
+        "effective_from": "2026-10-03T12:00:00.100000Z", "created_at": "2026-10-03T12:00:01Z", "item_count": 1,
+    }))
+    api.expect("POST", "/query/rows", [{"record_id": "child1"}])
+    api.expect("GET", f"/form/{schemas['snapshot_item']['id']}/record/child1", record_response("snapshot_item", "child1", {
+        "canonical_url": "https://fixture.invalid/", "title": "Saved title", "content_hash": "a" * 64,
+    }, parent_id="latest"))
+    stored = store.load_latest_snapshot("site1")
+    assert stored.record.record_id == "latest"
+    expected = Snapshot((SnapshotItem("https://fixture.invalid/", "Saved title", "a" * 64),))
+    assert stored.snapshot == expected
+    from web_monitor.diff import compare_snapshots
+    from web_monitor.models import SnapshotDiff
+    assert compare_snapshots(stored.snapshot, expected) == SnapshotDiff()
+
+
+def test_latest_snapshot_rejects_cross_site_record(api, schemas, record_response):
+    store = ActivityInfoPersistence(api.client, schemas)
+    api.expect("POST", "/query/rows", [{"record_id": "latest", "effective_from": timestamp(NOW), "created_at": timestamp(NOW)}])
+    api.expect("GET", f"/form/{schemas['snapshot']['id']}/record/latest", record_response("snapshot", "latest", {
+        "monitored_site": schemas["monitored_site"]["id"] + ":other",
+        "effective_from": timestamp(NOW), "created_at": timestamp(NOW), "item_count": 0,
+    }))
+    api.expect("POST", "/query/rows", [])
+    with pytest.raises(PersistenceError, match="different monitored site"):
+        store.load_latest_snapshot("site1")
+
+
+def test_latest_incomplete_snapshot_is_not_ignored(api, schemas, record_response):
+    store = ActivityInfoPersistence(api.client, schemas)
+    api.expect("POST", "/query/rows", [{"record_id": "latest", "effective_from": timestamp(NOW), "created_at": timestamp(NOW)}])
+    api.expect("GET", f"/form/{schemas['snapshot']['id']}/record/latest", record_response("snapshot", "latest", {
+        "monitored_site": schemas["monitored_site"]["id"] + ":site1",
+        "effective_from": timestamp(NOW), "created_at": timestamp(NOW), "item_count": 2,
+    }))
+    api.expect("POST", "/query/rows", [])
+    with pytest.raises(PersistenceError, match="Incomplete"):
+        store.load_latest_snapshot("site1")

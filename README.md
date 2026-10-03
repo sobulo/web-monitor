@@ -92,5 +92,29 @@ It prints generated test record IDs so interrupted checks can be inspected.
 Both commands accept `--env-file /absolute/path/to/.env`. The token is never
 included in command output. Do not run the checkpoint against production data.
 
-Automatic crawl/persist lifecycle, deployment, scheduling, reports, and the
-historical query UI are not implemented.
+## Run one monitored site (Stage 3)
+
+With the existing ActivityInfo configuration and virtual environment active, run
+one Monitored Site by its ActivityInfo record ID:
+
+```sh
+python -m web_monitor.monitor <monitored-site-record-id>
+```
+
+The command prints the status, Crawl/Snapshot IDs, page count, and diff counts.
+Initial runs establish a baseline with zero diff counts. Unchanged runs reuse
+that Snapshot; changed runs save a complete new state. Failed crawls save an
+error Crawl without a Snapshot. Exit codes: `0` success, `1` recorded crawl error,
+`2` configuration/persistence failure. Run attempts for a site serially.
+Manual runs are explicit: scheduling and the `active` flag do not trigger them.
+
+The optional development checkpoint runs the same command twice against a site
+with no previous Snapshot, verifies the records, and deletes only its generated
+test records. It leaves the site configuration intact:
+
+```sh
+python -m web_monitor.activityinfo.verify_lifecycle <monitored-site-record-id>
+```
+
+Deployment, scheduling, reports, notifications, and the historical query UI
+are not implemented.
