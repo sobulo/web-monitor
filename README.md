@@ -176,3 +176,6 @@ cannot load. The Notebook opens through **View the full monitoring report**.
 
 Run the offline reporting tests with `pytest tests/test_reporting.py tests/activityinfo/test_reporting.py tests/test_reports_web.py`,
 or `pytest` for the complete regression suite.
+
+For the retained three-site dataset and expected chart values, see
+[populated reporting acceptance](docs/reporting-acceptance.md).

@@ -187,7 +187,13 @@ counts are summed as operational totals, not endpoint-state differences. A futur
 Flask chart renderer can reuse these metrics without a report provider.
 
 `ActivityInfoReportPublisher` owns a deterministic database-owned NOTEBOOK report
-with two native pivot analyses: Crawl counts by site/status and a status bar chart.
+with four native pivot analyses: Crawl counts by site/status (TABLE), summed
+`changed_count` by site (BARCHART), daily Crawl counts (LINECHART), and overall
+status counts (PIECHART). The bar measures modified pages, distinct from status
+counts; repeated changes to a page count as repeated activity. Pie statuses use
+the COLUMN/series axis to form one distribution, rather than ROW facets that
+would produce separate 100% pies. The text component
+explains baseline, unchanged, transition, and failure semantics.
 Sources are Crawl and Monitored Site; no error text or Snapshot Items are included.
 It verifies ownership, sources, components, analysis definitions, and publication
 through read-back. ActivityInfo sorts source IDs and adds nullable defaults to
@@ -217,3 +223,19 @@ References: [Update report](https://www.activityinfo.org/support/docs/api/refere
 [Pivot](https://www.activityinfo.org/support/docs/api/reference/pivot.html),
 [Get published report](https://www.activityinfo.org/support/docs/api/reference/getPublishedReport.html),
 and [Publishing a Report](https://www.activityinfo.org/support/docs/reports/publishing-a-report.html).
+
+Daily grouping uses a report-only calculated table with `SELECTCOLUMNS` to
+project Crawl ID and `DATEVALUE(LEFT(crawled_at, 10))` as a typed date. The line
+analysis counts that ID and groups the date using documented `dateLevel: DATE`.
+A direct formula dimension saved successfully but was omitted from live pivot
+results; projecting the date as a calculated-table column produced the verified
+six daily groups. No form or persistence schema is changed. Persistence already
+writes ISO timestamps in UTC. Manually imported timestamps must follow
+that UTC storage contract. Setup verifies report identity/ownership before
+refining content, then verifies the complete new definition and analyses after
+writing; the read-only web path always checks the current definition strictly.
+
+The retained [reporting fixture](reporting-acceptance.md) checks fixed expected
+metrics against every native analysis. User visual acceptance precedes cleanup.
+Formula references: [DATEVALUE](https://www.activityinfo.org/support/docs/formulas/datevalue.html)
+and [LEFT](https://www.activityinfo.org/support/docs/formulas/left.html).

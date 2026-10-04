@@ -80,7 +80,8 @@ def test_two_report_payload_semantics_and_public_data_allowlist(schemas):
     assert notebook["id"] != single["id"]
     assert notebook["layout"] == "NOTEBOOK"
     assert single["layout"] == "SINGLE"
-    assert len(notebook["analyses"]) == 2
+    assert len(notebook["analyses"]) == 4
+    assert len(notebook["components"]) == 5
     assert len(single["analyses"]) == len(single["components"]) == 1
     assert single["analyses"][0]["model"]["visualization"] == "BARCHART"
     for report in (notebook, single):
@@ -89,8 +90,13 @@ def test_two_report_payload_semantics_and_public_data_allowlist(schemas):
             schemas["crawl"]["id"], schemas["monitored_site"]["id"],
         ])
         for analysis in report["analyses"]:
-            assert analysis["model"]["measures"][0]["formula"] == "_id"
-            assert analysis["model"]["measures"][0]["statistics"] == ["COUNT"]
+            measure = analysis["model"]["measures"][0]
+            if measure["code"] == "modified_pages":
+                assert measure["formula"] == "changed_count"
+                assert measure["statistics"] == ["SUM"]
+            else:
+                assert measure["formula"] in ("_id", "crawl_id")
+                assert measure["statistics"] == ["COUNT"]
     text = str((notebook, single))
     assert all(value not in text for value in (
         "error_message", "content_hash", "ACTIVITYINFO_API_TOKEN",
@@ -181,3 +187,32 @@ def test_published_metadata_accepts_server_defaults(api, schemas):
     queue_report(api, notebook, metadata=metadata)
     publisher = ActivityInfoReportPublisher(api.client, schemas)
     assert publisher._setup_report(notebook) == metadata
+
+
+def test_notebook_questions_have_distinct_semantics(schemas):
+    report = build_notebook_report("testdatabase", schemas, publish=False)
+    table, changes, daily, distribution = [a["model"] for a in report["analyses"]]
+    assert [a["visualization"] for a in (table, changes, daily, distribution)] == [
+        "TABLE", "BARCHART", "LINECHART", "PIECHART"]
+    assert [d["mappings"][0]["formula"] for d in table["dimensions"]] == [
+        "monitored_site.name", "status"]
+    assert changes["measures"][0]["formula"] == "changed_count"
+    assert daily["dimensions"][0]["dateLevel"] == "DATE"
+    assert daily["dimensions"][0]["mappings"][0]["formula"] == "crawl_date"
+    dated = report["sources"]["calculatedTables"][0]
+    assert '"crawl_date", DATEVALUE(LEFT(crawled_at, 10))' in dated["formula"]
+    assert daily["measures"][0]["formId"] == dated["id"]
+    assert daily["measures"][0]["formula"] == "crawl_id"
+    assert daily["dimensions"][0]["mappings"][0]["formId"] == dated["id"]
+    assert distribution["dimensions"][0]["mappings"][0]["formula"] == "status"
+    assert distribution["dimensions"][0]["axis"] == "COLUMN"
+
+
+def test_setup_accepts_content_refinement_but_web_validation_is_strict(api, schemas):
+    report = build_notebook_report("testdatabase", schemas, publish=False)
+    old = response(report, True)
+    old["components"] = old["components"][:3]
+    publisher = ActivityInfoReportPublisher(api.client, schemas)
+    publisher._validate_report(old, report, check_components=False)
+    with pytest.raises(ReportValidationError):
+        publisher._validate_report(old, report)

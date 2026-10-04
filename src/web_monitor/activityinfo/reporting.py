@@ -70,17 +70,38 @@ def _analysis(report_identity, crawl_form, name, visualization, dimensions):
 def build_notebook_report(database_id: str, schemas: dict, *, publish: bool) -> dict:
     identity = notebook_report_id(database_id)
     crawl_form = schemas["crawl"]["id"]
+    dated_crawls = stable_id(identity, "dated_crawls")
     sources = {
         "forms": sorted([crawl_form, schemas["monitored_site"]["id"]]),
-        "calculatedTables": [],
+        "calculatedTables": [{
+            "id": dated_crawls,
+            "alias": "dated_crawls",
+            "formula": (f'SELECTCOLUMNS({crawl_form}, "crawl_id", _id, '
+                        '"crawl_date", DATEVALUE(LEFT(crawled_at, 10)))'),
+        }],
     }
+    date_dimension = _dimension(
+        identity, dated_crawls, "Crawl date (UTC)", "crawl_date", "ROW",
+    )
+    date_dimension["dateLevel"] = "DATE"
+    changes = _analysis(identity, crawl_form, "change_activity", "BARCHART", [
+        _dimension(identity, crawl_form, "Monitored Site", "monitored_site.name", "ROW"),
+    ])
+    changes["model"]["measures"][0].update(
+        code="modified_pages", label="Modified pages", formula="changed_count",
+        statistics=["SUM"],
+    )
+    daily = _analysis(identity, dated_crawls, "daily_activity", "LINECHART", [date_dimension])
+    daily["model"]["measures"][0]["formula"] = "crawl_id"
     analyses = [
         _analysis(identity, crawl_form, "site_status", "TABLE", [
             _dimension(identity, crawl_form, "Monitored Site", "monitored_site.name", "ROW"),
             _dimension(identity, crawl_form, "Status", "status", "COLUMN"),
         ]),
-        _analysis(identity, crawl_form, "status_distribution", "BARCHART", [
-            _dimension(identity, crawl_form, "Status", "status", "ROW"),
+        changes,
+        daily,
+        _analysis(identity, crawl_form, "status_distribution", "PIECHART", [
+            _dimension(identity, crawl_form, "Status", "status", "COLUMN"),
         ]),
     ]
     components = [{
@@ -88,9 +109,11 @@ def build_notebook_report(database_id: str, schemas: dict, *, publish: bool) -> 
         "type": "TEXT",
         "visible": True,
         "content": (
-            "Monitoring attempts grouped by site and status. Initial establishes a baseline; "
-            "changed denotes a state transition. Errors are failed attempts. "
-            "Only aggregate monitoring metadata is included."
+            "initial = baseline; no_change = successful unchanged observation; "
+            "changed = state transition; error = failed crawl. Counts describe attempts, "
+            "not distinct snapshots. Modified pages sums changed_count across attempts; "
+            "additions and removals are separate. Daily activity uses UTC dates. "
+            "Sites without Crawls do not contribute to these aggregate charts."
         ),
     }]
     components.extend({
@@ -102,6 +125,8 @@ def build_notebook_report(database_id: str, schemas: dict, *, publish: bool) -> 
         "visualizationType": analysis["model"]["visualization"],
     } for analysis, title in zip(analyses, (
         "Monitoring activity by site and status",
+        "Modified pages by Monitored Site",
+        "Crawl activity by UTC date",
         "Crawl-status distribution",
     )))
     return {
@@ -258,21 +283,32 @@ class ActivityInfoReportPublisher:
             build_single_report(client.database_id, self.schemas, publish=False),
         )
 
-    def _validate_report(self, value, expected, *, published=None):
-        if not isinstance(value, dict) or any((
+    def _validate_report(self, value, expected, *, published=None, check_components=True):
+        if not isinstance(value, dict) or not isinstance(value.get("sources"), dict):
+            raise ReportValidationError("Malformed report or sources")
+        if any((
             value.get("id") != expected["id"],
             value.get("ownerType") != "DATABASE",
             value.get("databaseId") != self.client.database_id,
             value.get("label") != expected["label"],
             value.get("layout") != expected["layout"],
-            value.get("sources") != expected["sources"],
+            not isinstance(value.get("sources"), dict),
+            (value.get("sources") != expected["sources"] if check_components else
+             value.get("sources", {}).get("forms") != expected["sources"]["forms"]),
             type(value.get("published")) is not bool,
         )):
             raise ReportValidationError("Report identity, ownership, sources, or layout mismatch")
         if published is not None and value["published"] is not published:
             raise ReportValidationError("Publication state was not confirmed")
         components = value.get("components")
-        if not isinstance(components, list) or len(components) != len(expected["components"]):
+        if not isinstance(components, list) or not components or any(
+            not isinstance(component, dict) or not component.get("id")
+            for component in components
+        ):
+            raise ReportValidationError("Malformed report components")
+        if not check_components:
+            return value
+        if len(components) != len(expected["components"]):
             raise ReportValidationError("Report components mismatch")
         for actual, wanted in zip(components, expected["components"]):
             if not isinstance(actual, dict) or any(actual.get(key) != val for key, val in wanted.items()):
@@ -304,7 +340,9 @@ class ActivityInfoReportPublisher:
                 raise
             existing = None
         if existing is not None:
-            self._validate_report(existing, expected)
+            # Setup may refine content on the same owned report. Read-only web
+            # access and post-write checks still require the exact current content.
+            self._validate_report(existing, expected, check_components=False)
         definition = dict(expected, publish=existing["published"] if existing else False)
         self.client.update_report(definition)
         self._validate_report(self.client.get_report(expected["id"]), expected)
