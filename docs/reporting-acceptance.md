@@ -1,11 +1,14 @@
 # Populated reporting acceptance
 
-Stage 6 remains pending user visual acceptance and subsequent targeted cleanup.
+Stage 6 was visually accepted by the user on 2026-10-04. All 25 synthetic
+records were then removed and verified absent. The four seeded sites were
+verified unchanged, and both reports remain published exactly once with their
+definitions and analyses intact. Stage 6 is complete; Stage 7 has not started.
 Application metrics and all five native analyses have passed the known-value
 checks, including anonymous published results. The populated Notebook charts,
 aggregate table, Single iframe, and Notebook link have been inspected in-browser.
 The full offline suite passes (231 tests).
-The development fixture is intentionally retained until that acceptance. It does
+For future reruns, retain the development fixture until visual acceptance. It does
 not crawl websites or alter schema, lifecycle code, or the four seeded sites.
 
 ## Reproduce and inspect

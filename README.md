@@ -153,8 +153,10 @@ site configurations unchanged. No web route creates records or triggers crawls.
 
 ## Reporting (Stage 6)
 
-Embedding is accepted. Stage 6 remains pending a populated-data acceptance check
-of native report query results and rendered charts before deployment readiness.
+Stage 6 passed populated-data verification and user visual acceptance on
+2026-10-04. Synthetic records were removed; the four seeded sites and both
+published report definitions remain intact. Deployment readiness is a separate
+Stage 6.5 review; no deployment has been performed.
 
 ```sh
 python -m web_monitor.activityinfo.reporting
