@@ -150,3 +150,29 @@ development `.env` configured, `python -m web_monitor.activityinfo.verify_web`
 starts a temporary local Flask server, verifies the four seeded sites and history
 pages using synthetic records, then cleans up those records. It leaves the seeded
 site configurations unchanged. No web route creates records or triggers crawls.
+
+## Reporting (Stage 6)
+
+Embedding is accepted. Stage 6 remains pending a populated-data acceptance check
+of native report query results and rendered charts before deployment readiness.
+
+```sh
+python -m web_monitor.activityinfo.reporting
+python main.py
+```
+
+Open <http://127.0.0.1:8080/reports> for monitoring totals and the ActivityInfo
+visualization. Setup maintains two deterministic database-owned reports: the
+**Monitoring Overview** Notebook for detail and **Monitoring Activity** Single
+bar chart for embedding. Reruns update the same reports. Publishing requires
+ActivityInfo's **Publish reports** permission; setup never changes permissions.
+
+Set `ACTIVITYINFO_SINGLE_EMBED_URL` to the exact iframe `src` copied from the
+Single report's **Sharing & Publishing → Publishing** screen, and
+`ACTIVITYINFO_NOTEBOOK_PUBLIC_URL` to the Notebook's standalone published URL.
+Keep these in local `.env`. The adapter validates the host and report identity;
+URLs are never inferred. The local summary remains available if the provider
+cannot load. The Notebook opens through **View the full monitoring report**.
+
+Run the offline reporting tests with `pytest tests/test_reporting.py tests/activityinfo/test_reporting.py tests/test_reports_web.py`,
+or `pytest` for the complete regression suite.

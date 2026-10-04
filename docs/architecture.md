@@ -174,5 +174,46 @@ and raw upstream responses. Templates autoescape stored text.
 
 The recent-history table reads metadata only; the overview's separate latest-change
 summary reconstructs that transition's two Snapshots via the query service.
-No routes mutate records or trigger monitoring. ActivityInfo reporting remains
-Stage 6; deployment, scheduling, and authentication are outside this stage.
+No routes mutate records or trigger monitoring. Reporting is described below;
+deployment, scheduling, and authentication remain outside this stage.
+
+## Reporting boundary (Stage 6)
+
+`ReportingService` owns per-site and overall operational counts and latest UTC
+attempt/success/change times through a structural `ReportingStore` protocol.
+It imports no ActivityInfo types, formulas, or report JSON. Initial observations
+are successful baselines, not changes; errors are failed attempts. Stored diff
+counts are summed as operational totals, not endpoint-state differences. A future
+Flask chart renderer can reuse these metrics without a report provider.
+
+`ActivityInfoReportPublisher` owns a deterministic database-owned NOTEBOOK report
+with two native pivot analyses: Crawl counts by site/status and a status bar chart.
+Sources are Crawl and Monitored Site; no error text or Snapshot Items are included.
+It verifies ownership, sources, components, analysis definitions, and publication
+through read-back. ActivityInfo sorts source IDs and adds nullable defaults to
+analyses. The analysis `modelType` discriminator shown in Get analysis is needed
+on writes although the Update report schema omits it; `showHidden` belongs to the
+Pivot query, not the persisted analysis model.
+
+The revised presentation uses two deterministic, database-owned reports. The
+existing Notebook remains the detailed report and is linked, never embedded.
+A separate SINGLE report contains one site/status Crawl-count bar chart for the
+`/reports` iframe. This split follows the user's manual ActivityInfo UI
+verification: Single reports expose an embeddable snippet; Notebooks expose a
+standalone page. The provider-independent metrics service remains unchanged.
+
+The published API returns report structure without an embed URL. The exact
+UI-generated Single iframe source and Notebook URL therefore come from trusted
+local configuration. The adapter validates HTTPS, ActivityInfo's host, the
+expected report identity, and the embed query. Templates render only the validated
+source, never raw provider HTML. `/reports` renders application metrics even when
+provider metadata is unavailable; the Notebook remains a separate external link.
+
+The page is Web Monitor's UI. ActivityInfo is a replaceable visualization provider;
+a future native renderer can use the same `ReportingService` results.
+
+References: [Update report](https://www.activityinfo.org/support/docs/api/reference/updateReport.html),
+[Get analysis](https://www.activityinfo.org/support/docs/api/reference/getAnalysis.html),
+[Pivot](https://www.activityinfo.org/support/docs/api/reference/pivot.html),
+[Get published report](https://www.activityinfo.org/support/docs/api/reference/getPublishedReport.html),
+and [Publishing a Report](https://www.activityinfo.org/support/docs/reports/publishing-a-report.html).

@@ -55,3 +55,10 @@ footer { padding-block: 1.5rem; border-top: 1px solid #c9d5db; font-size: .85rem
 .skip { position: absolute; top: -100px; background: white; padding: .8rem; z-index: 2; }
 .skip:focus { top: .5rem; left: .5rem; }
 @media (max-width: 560px) { .panel, form { padding: 1rem; } th, td { padding: .6rem; } .tagline { display: none; } }
+.header-link { color: white; }
+.header-link:hover { color: #d0e2e8; }
+.metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 1rem; }
+.metric-grid .panel { margin: 0; }
+.metric-grid dd { font-size: 2rem; font-weight: 700; margin: .3rem 0 0; }
+.report-frame { background: white; border: 1px solid #c9d5db; border-radius: .5rem; overflow: hidden; }
+.report-frame iframe { display: block; border: 0; width: 100%; height: 520px; }

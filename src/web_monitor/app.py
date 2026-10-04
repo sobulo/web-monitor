@@ -68,6 +68,23 @@ def create_app(config: dict | None = None, *, services=None) -> Flask:
     def index():
         return render_template('index.html', sites=dependencies().sites.list_monitored_sites())
 
+    @app.get('/reports')
+    def reports():
+        services = dependencies()
+        overview = services.reporting.overview()
+        metadata = None
+        provider_error = False
+        try:
+            if services.report_provider is not None:
+                metadata = services.report_provider.published_reports()
+                metadata.validate()
+        except Exception as error:
+            app.logger.error('Report provider unavailable: category=%s', type(error).__name__)
+            provider_error = True
+            metadata = None
+        return render_template('reports.html', overview=overview, published=metadata,
+                               provider_error=provider_error)
+
     @app.get('/sites/<site_id>')
     def overview(site_id):
         site = site_record(site_id)

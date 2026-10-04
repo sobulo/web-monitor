@@ -154,3 +154,28 @@ class ActivityInfoClient:
             if change.get("parentRecordId"):
                 resource_id(change["parentRecordId"])
         self._request("POST", "/update", {"changes": changes})
+
+    def get_report(self, report_id: str):
+        return self._request('GET', f'/reports/{resource_id(report_id)}')
+
+    def get_reports(self):
+        """Personal report listing; database reports are listed in the tree."""
+        return self._request('GET', '/reports')
+
+    def update_report(self, definition: dict):
+        resource_id(definition['id'])
+        if definition.get('owner') != {'type':'DATABASE', 'id':self.database_id}:
+            raise ValueError('Report must belong to the configured database')
+        return self._request('POST', '/reports', definition)
+
+    def get_analysis(self, report_id: str, analysis_id: str):
+        return self._request('GET', f'/reports/{resource_id(report_id)}/analyses/{resource_id(analysis_id)}')
+
+    def get_analysis_results(self, report_id: str, analysis_id: str):
+        return self._request('POST', '/reports/analyses/results', {
+            'reportId':resource_id(report_id), 'analysisId':resource_id(analysis_id),
+            'slicerValues':[],
+        })
+
+    def get_published_report(self, report_id: str):
+        return self._request('GET', f'/reports/{resource_id(report_id)}/published')

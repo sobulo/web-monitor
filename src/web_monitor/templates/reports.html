@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import stamp %}
+{% block title %}Monitoring Overview{% endblock %}
+{% block content %}
+<h1>Monitoring Overview</h1><p class="intro">Monitoring activity across your sites. Counts describe crawl attempts, not distinct states.</p>
+<dl class="metric-grid">
+{% for label, value in [('Monitored Sites',overview.monitored_sites),('Total Crawls',overview.totals.total_crawls),('Successful Crawls',overview.totals.successful_crawls),('Changed Crawls',overview.totals.changed_crawls),('Errors',overview.totals.error_crawls)] %}
+<div class="panel"><dt>{{ label }}</dt><dd>{{ value }}</dd></div>{% endfor %}
+</dl>
+<p><strong>Latest Crawl:</strong> {% if overview.totals.last_crawl %}{{ stamp(overview.totals.last_crawl) }}{% else %}No Crawls recorded yet.{% endif %}</p>
+<p><strong>Latest change:</strong> {% if overview.totals.last_change %}{{ stamp(overview.totals.last_change) }}{% else %}No change recorded yet.{% endif %}</p>
+<section><h2>Monitoring activity by site and status</h2><p class="muted">Report provider: ActivityInfo. The visualization shows aggregate monitoring activity.</p>
+{% if published and published.embed_url %}
+<div class="report-frame"><iframe src="{{ published.embed_url }}" title="ActivityInfo monitoring activity by site and crawl status" loading="lazy" referrerpolicy="no-referrer"></iframe></div>
+{% else %}<p class="empty">{% if provider_error %}The published visualization is temporarily unavailable. Your monitoring summary is shown above.{% else %}The published visualization has not been configured yet. Your monitoring summary is shown above.{% endif %}</p>{% endif %}
+{% if published and published.notebook_url %}<p><a href="{{ published.notebook_url }}" target="_blank" rel="noopener noreferrer">View the full monitoring report</a> — the detailed ActivityInfo Notebook.</p>{% endif %}
+<p class="muted">The summary remains available if the embedded report cannot load. Published reports may take time to reflect recent data.</p>
+</section>
+{% endblock %}
