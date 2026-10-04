@@ -9,10 +9,11 @@ import requests
 
 from web_monitor import diff
 from web_monitor.activityinfo.persistence import (
-    CrawlRecord, MonitoredSiteRecord, StoredSnapshot, new_record_id,
+    CrawlRecord, MonitoredSiteRecord, StoredSnapshot, PersistenceError, new_record_id,
 )
 from web_monitor.crawler import CrawlError, crawl_site
 from web_monitor.models import MonitoredSite, Snapshot, SnapshotDiff
+from web_monitor.scheduler_identity import SchedulerInvocation
 
 
 class MonitoringStore(Protocol):
@@ -20,7 +21,8 @@ class MonitoringStore(Protocol):
 
     def read_monitored_site(self, record_id: str) -> MonitoredSiteRecord: ...
 
-    def load_latest_snapshot(self, monitored_site_id: str) -> StoredSnapshot | None: ...
+    def load_latest_snapshot(self, monitored_site_id: str, *,
+                             exclude_snapshot_id: str | None = None) -> StoredSnapshot | None: ...
 
     def persist_snapshot(
         self, snapshot: Snapshot, *, monitored_site_id: str,
@@ -28,6 +30,10 @@ class MonitoringStore(Protocol):
     ) -> StoredSnapshot: ...
 
     def create_crawl(self, record: CrawlRecord) -> None: ...
+
+    def find_crawl(self, record_id: str) -> CrawlRecord | None: ...
+
+    def find_snapshot(self, record_id: str) -> StoredSnapshot | None: ...
 
 
 @dataclass(frozen=True)
@@ -37,6 +43,7 @@ class MonitoringResult:
     site: MonitoredSiteRecord
     crawl: CrawlRecord
     changes: SnapshotDiff | None
+    reused: bool = False
 
     @property
     def snapshot_created(self) -> bool:
@@ -85,21 +92,47 @@ class MonitoringService:
         self.crawler = crawler
         self.clock = clock or (lambda: datetime.now(timezone.utc))
 
-    def run(self, monitored_site_id: str) -> MonitoringResult:
+    def run(self, monitored_site_id: str, *,
+            invocation: SchedulerInvocation | None = None) -> MonitoringResult:
         site = self.store.read_monitored_site(monitored_site_id)
+        crawl_id = invocation.crawl_id(site.record_id) if invocation else new_record_id()
+        snapshot_id = invocation.snapshot_id(site.record_id) if invocation else None
+        provenance = ({"scheduler_invocation": invocation.key,
+                       "scheduled_at": invocation.scheduled_at} if invocation else {})
+        recovered = None
+        if invocation:
+            completed = self.store.find_crawl(crawl_id)
+            if completed is not None:
+                if (completed.monitored_site_id != site.record_id
+                        or completed.scheduler_invocation != invocation.key
+                        or completed.scheduled_at != invocation.scheduled_at):
+                    raise PersistenceError("Scheduled Crawl identity conflict")
+                return MonitoringResult(site, completed, None, reused=True)
+            recovered = self.store.find_snapshot(snapshot_id)
+            if recovered is not None and recovered.record.monitored_site_id != site.record_id:
+                raise PersistenceError("Scheduled Snapshot identity conflict")
         # Resolve persisted state before crawling so malformed history cannot be
         # mistaken for an initial observation or overwritten with a new baseline.
         previous = self.store.load_latest_snapshot(site.record_id)
+        if recovered is not None:
+            # A complete deterministic Snapshot may outlive an unacknowledged
+            # Crawl write. Recover only while it is still the latest state.
+            if previous is None or previous != recovered:
+                raise PersistenceError("Scheduled recovery requires the latest complete Snapshot")
+            previous = self.store.load_latest_snapshot(
+                site.record_id, exclude_snapshot_id=snapshot_id,
+            )
+            if previous is not None and previous.record.effective_from >= recovered.record.effective_from:
+                raise PersistenceError("Ambiguous scheduled recovery ordering")
         previous_id = previous.record.record_id if previous is not None else None
-        crawled_at = self.clock()
-        crawl_id = new_record_id()
+        crawled_at = recovered.record.effective_from if recovered else self.clock()
         try:
-            observed = self.crawler(site.site)
+            observed = recovered.snapshot if recovered else self.crawler(site.site)
         except CrawlError as error:
             crawl = CrawlRecord(
                 crawl_id, site.record_id, crawled_at, "error",
                 previous_snapshot_id=previous_id,
-                error_message=sanitized_crawl_error(error),
+                error_message=sanitized_crawl_error(error), **provenance,
             )
             self.store.create_crawl(crawl)
             return MonitoringResult(site, crawl, None)
@@ -110,11 +143,17 @@ class MonitoringService:
         )
         changed = bool(changes.added or changes.removed or changes.changed)
         status = "initial" if previous is None else "changed" if changed else "no_change"
+        new_snapshot_id = snapshot_id
         snapshot_id = previous_id
-        if status in {"initial", "changed"}:
+        if recovered is not None:
+            if status not in {"initial", "changed"}:
+                raise PersistenceError("Recovered Snapshot is not a distinct state")
+            snapshot_id = recovered.record.record_id
+        elif status in {"initial", "changed"}:
             saved = self.store.persist_snapshot(
                 observed, monitored_site_id=site.record_id,
                 created_at=self.clock(), effective_from=crawled_at,
+                **({"record_id": new_snapshot_id} if invocation else {}),
             )
             snapshot_id = saved.record.record_id
         crawl = CrawlRecord(
@@ -122,6 +161,7 @@ class MonitoringService:
             snapshot_id=snapshot_id, previous_snapshot_id=previous_id,
             added_count=len(changes.added), removed_count=len(changes.removed),
             changed_count=len(changes.changed), pages_crawled=len(observed.items),
+            **provenance,
         )
         self.store.create_crawl(crawl)
         return MonitoringResult(site, crawl, changes)

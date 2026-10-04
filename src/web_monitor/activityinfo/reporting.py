@@ -286,6 +286,13 @@ class ActivityInfoReportPublisher:
     def _validate_report(self, value, expected, *, published=None, check_components=True):
         if not isinstance(value, dict) or not isinstance(value.get("sources"), dict):
             raise ReportValidationError("Malformed report or sources")
+        # Source forms are a collection. The provider may return a different
+        # order for different databases; preserve strict membership/uniqueness.
+        sources = dict(value["sources"])
+        forms = sources.get("forms")
+        if not isinstance(forms, list) or any(not isinstance(form, str) for form in forms):
+            raise ReportValidationError("Malformed report source forms")
+        sources["forms"] = sorted(forms)
         if any((
             value.get("id") != expected["id"],
             value.get("ownerType") != "DATABASE",
@@ -293,8 +300,8 @@ class ActivityInfoReportPublisher:
             value.get("label") != expected["label"],
             value.get("layout") != expected["layout"],
             not isinstance(value.get("sources"), dict),
-            (value.get("sources") != expected["sources"] if check_components else
-             value.get("sources", {}).get("forms") != expected["sources"]["forms"]),
+            (sources != expected["sources"] if check_components else
+             sources["forms"] != expected["sources"]["forms"]),
             type(value.get("published")) is not bool,
         )):
             raise ReportValidationError("Report identity, ownership, sources, or layout mismatch")

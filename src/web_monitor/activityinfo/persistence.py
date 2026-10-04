@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import json
 from uuid import uuid4
 
-from web_monitor.activityinfo.client import ActivityInfoClient, resource_id
+from web_monitor.activityinfo.client import ActivityInfoClient, ActivityInfoError, resource_id
 from web_monitor.activityinfo.schema import (
     STATUS_VALUES, fields_by_code, inspect_schema, stable_id,
 )
@@ -97,6 +97,8 @@ class CrawlRecord:
     changed_count: int = 0
     pages_crawled: int = 0
     error_message: str | None = None
+    scheduler_invocation: str | None = None
+    scheduled_at: datetime | None = None
 
 
 class ActivityInfoPersistence:
@@ -104,7 +106,7 @@ class ActivityInfoPersistence:
 
     def __init__(self, client: ActivityInfoClient, schemas: dict | None = None):
         self.client = client
-        self.schemas = inspect_schema(client) if schemas is None else schemas
+        self.schemas = inspect_schema(client, allow_legacy_scheduler=True) if schemas is None else schemas
         self.ids = {code: schema["id"] for code, schema in self.schemas.items()}
         self.fields = {code: fields_by_code(schema) for code, schema in self.schemas.items()}
 
@@ -253,7 +255,8 @@ class ActivityInfoPersistence:
             raise PersistenceError("Incomplete Snapshot: child count differs from item_count")
         return StoredSnapshot(record, Snapshot(tuple(child.item for child in items)), items)
 
-    def load_latest_snapshot(self, monitored_site_id: str) -> StoredSnapshot | None:
+    def load_latest_snapshot(self, monitored_site_id: str, *,
+                             exclude_snapshot_id: str | None = None) -> StoredSnapshot | None:
         """Reconstruct the latest distinct state for exactly one monitored site.
 
         Parse timestamps before ordering (text ordering mishandles offsets and
@@ -275,6 +278,11 @@ class ActivityInfoPersistence:
         ]
         if len({candidate[2] for candidate in candidates}) != len(candidates):
             raise PersistenceError("Duplicate Snapshot IDs in query")
+        # Only the scheduler's already validated complete recovery candidate may
+        # be excluded. Ordinary history always validates the actual latest state.
+        candidates = [c for c in candidates if c[2] != exclude_snapshot_id]
+        if not candidates:
+            return None
         effective_from, created_at, record_id = max(candidates)
         stored = self.load_snapshot(record_id)
         if stored.record.monitored_site_id != monitored_site_id:
@@ -286,6 +294,14 @@ class ActivityInfoPersistence:
     def create_crawl(self, record: CrawlRecord) -> None:
         if record.status not in STATUS_VALUES:
             raise PersistenceError("Invalid Crawl status")
+        provenance = {}
+        if record.scheduler_invocation is not None or record.scheduled_at is not None:
+            if not record.scheduler_invocation or record.scheduled_at is None:
+                raise PersistenceError("Incomplete scheduler provenance")
+            if not {"scheduler_invocation", "scheduled_at"} <= self.fields["crawl"].keys():
+                raise PersistenceError("Scheduler fields are missing; run bootstrap")
+            provenance = {"scheduler_invocation": record.scheduler_invocation,
+                          "scheduled_at": timestamp(record.scheduled_at)}
         self._write("crawl", record.record_id, {
             "monitored_site": self._reference("monitored_site", record.monitored_site_id),
             "crawled_at": timestamp(record.crawled_at),
@@ -297,6 +313,7 @@ class ActivityInfoPersistence:
             "changed_count": count(record.changed_count),
             "pages_crawled": count(record.pages_crawled),
             "error_message": record.error_message,
+            **provenance,
         })
 
     def read_crawl(self, record_id: str) -> CrawlRecord:
@@ -310,7 +327,27 @@ class ActivityInfoPersistence:
             count(values["added_count"]), count(values["removed_count"]),
             count(values["changed_count"]), count(values["pages_crawled"]),
             values["error_message"],
+            values.get("scheduler_invocation"),
+            read_timestamp(values["scheduled_at"]) if values.get("scheduled_at") is not None else None,
         )
+
+    def find_crawl(self, record_id: str) -> CrawlRecord | None:
+        try:
+            return self.read_crawl(record_id)
+        except ActivityInfoError as error:
+            if error.status == 404:
+                return None
+            raise
+
+    def find_snapshot(self, record_id: str) -> StoredSnapshot | None:
+        # Only an absent parent means absent state. Missing children never do.
+        try:
+            self.read_snapshot(record_id)
+        except ActivityInfoError as error:
+            if error.status == 404:
+                return None
+            raise
+        return self.load_snapshot(record_id)
 
     def list_crawls(self, monitored_site_id: str) -> tuple[CrawlRecord, ...]:
         """Read one site's metadata only; temporal selection belongs to history."""

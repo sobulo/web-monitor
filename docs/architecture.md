@@ -196,8 +196,9 @@ would produce separate 100% pies. The text component
 explains baseline, unchanged, transition, and failure semantics.
 Sources are Crawl and Monitored Site; no error text or Snapshot Items are included.
 It verifies ownership, sources, components, analysis definitions, and publication
-through read-back. ActivityInfo sorts source IDs and adds nullable defaults to
-analyses. The analysis `modelType` discriminator shown in Get analysis is needed
+through read-back. ActivityInfo can reorder source IDs and adds nullable defaults to
+analyses. Source-form membership is compared without relying on order; duplicates
+and unexpected sources remain invalid. The analysis `modelType` discriminator shown in Get analysis is needed
 on writes although the Update report schema omits it; `showHidden` belongs to the
 Pivot query, not the persisted analysis model.
 
@@ -239,3 +240,87 @@ The retained [reporting fixture](reporting-acceptance.md) checks fixed expected
 metrics against every native analysis. User visual acceptance precedes cleanup.
 Formula references: [DATEVALUE](https://www.activityinfo.org/support/docs/formulas/datevalue.html)
 and [LEFT](https://www.activityinfo.org/support/docs/formulas/left.html).
+
+
+## Production runtime and scheduling (Stage 7)
+
+App Engine Standard runs Python 3.11/Gunicorn in the default service: F1,
+automatic scaling, minimum zero/maximum one instance. One Gunicorn worker with
+four threads keeps the public UI responsive during the daily crawl. The
+production ActivityInfo database is separate from local development; bootstrap
+adds forms, optional provenance fields, four seed configurations, and the two
+published reports, never development history. Production deploys only after the
+user supplies the provider's exact Single embed URL and Notebook standalone URL.
+Both passes completed on 2026-10-04, including a real scheduled delivery,
+production report/history checks, and a guarded retry replay.
+
+Configuration first uses an explicit token. Only an App Engine Standard runtime
+without that variable loads Secret Manager via its official client and platform
+credentials, using `GOOGLE_CLOUD_PROJECT`. Production pins the newest enabled
+secret version during bootstrap. This avoids needing version-list permissions
+beyond Secret Accessor and makes rotation explicit. Failed/disabled versions
+fail closed; no token or raw cloud exception is logged. Imports, `/health`, and
+offline tests need no credentials. App Engine ignores local dotenv files, which
+are also excluded from upload.
+
+Cloud Scheduler's App Engine target calls `POST /tasks/monitor`. The dedicated
+`login: admin` handler supplies platform authorization; the public UI remains
+public. Scheduler headers are invocation metadata, not cryptographic proof.
+The route validates the configured project/location/job, the optional
+`X-CloudScheduler: true` marker, and a timezone-aware RFC3339 schedule time.
+It delegates orchestration to `ScheduledMonitoringService`, which selects active
+`daily` sites and calls the existing `MonitoringService` serially. Ordinary
+`CrawlError` results persist error Crawls and processing continues. Storage or
+infrastructure failures return 500 instead of acknowledging incomplete work.
+
+The identity is a hash of the full job name plus normalized UTC
+`X-CloudScheduler-ScheduleTime`. Crawl stores optional `scheduler_invocation`
+and `scheduled_at`; bootstrap appends those fields without rewriting records or
+accepting incompatible definitions. Legacy development schemas still support
+manual monitoring; scheduled writes require the migrated schema. Each site's
+scheduled Crawl and potential new Snapshot have deterministic IDs; Snapshot
+Item IDs remain derived from Snapshot ID and URL. Manual runs retain random
+attempt IDs and their original lifecycle semantics.
+
+On retry, an existing matching Crawl is reused without crawling or writing. A
+multi-site retry skips completed sites and continues the remainder. If a complete
+scheduled Snapshot survived a failed Crawl write, the service checks it is still
+the latest state, loads the preceding state, recomputes the diff, and finalizes
+the Crawl without recrawling or rewriting Snapshot/items. Its original observation
+time is preserved. Incomplete Snapshots, conflicting provenance, ambiguous order,
+or an intervening newer state fail closed for inspection; retries do not silently
+skip corrupt history or reinterpret a partially written Snapshot as a baseline.
+
+A process-wide lock serializes scheduled deliveries in the one worker. ActivityInfo
+has no transaction/conditional-create guarantee here: rare cross-instance or
+cross-version concurrency can still race, and manual writers must not overlap
+scheduled monitoring. Deterministic IDs are retry deduplication, not mathematically
+exactly-once execution or distributed locking. During deployments, stop old
+versions after traffic migration to retain the intended cost/concurrency bounds.
+Logs include hashed invocation ID, site ID, status, retry detection, and sanitized
+failure category, never headers, token payloads, or raw upstream exceptions.
+
+References: [Scheduler App Engine targets and handler protection](https://docs.cloud.google.com/scheduler/docs/creating),
+[App Engine configuration](https://docs.cloud.google.com/appengine/docs/standard/reference/app-yaml),
+and [Secret Manager version access](https://docs.cloud.google.com/secret-manager/docs/access-secret-version).
+
+App Engine uses `europe-west`, while Scheduler names the same region
+`europe-west1`. The job-name header accepts the configured short name or its full
+resource name; both normalize to the configured project/location/job identity.
+Scheduled infrastructure failures return HTTP 500: App Engine targets treat 503
+as a system failure and retry it outside the job's configured retry count.
+
+Production App Engine manual-run deliveries supplied the configured short job
+name but omitted `X-CloudScheduler-ScheduleTime`. Missing times remain rejected;
+a near-term clock-triggered delivery is used for production acceptance, followed
+by restoration of the daily midnight UTC schedule. A separate guarded replay
+checks the persisted invocation without permitting any crawl or record writes.
+
+Acceptance observed four durable Crawls (three `initial`, one `error`), three
+complete Snapshots and three child items. All five native analyses matched the
+stored counts, the Single iframe and full Notebook rendered the populated data,
+and a replay reused all four attempts with crawler and write operations forbidden.
+Only the default F1 service/version was present; minimum instances zero (the API
+omits this default), maximum one. The staging bucket grants the runtime/build
+service account Object Viewer for source upload consumption. No project ID or
+secret payload is checked into application configuration.

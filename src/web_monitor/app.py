@@ -1,15 +1,19 @@
-"""Flask/Jinja presentation over application services; no monitoring writes."""
+"""Flask/Jinja presentation and a platform-protected scheduler handler."""
 
 from contextlib import ExitStack
 from datetime import date
 from pathlib import Path
+import logging
+import os
 import re
 
 from flask import Flask, abort, g, render_template, request
+from flask.logging import default_handler
 from werkzeug.exceptions import HTTPException
 
 from web_monitor.activityinfo.client import ActivityInfoError
 from web_monitor.web_services import configured_services
+from web_monitor.scheduler_identity import InvalidInvocation, SchedulerInvocation
 
 
 def create_app(config: dict | None = None, *, services=None) -> Flask:
@@ -20,6 +24,13 @@ def create_app(config: dict | None = None, *, services=None) -> Flask:
     """
     app = Flask(__name__)
     app.config.from_mapping(ENV_FILE=Path.cwd() / '.env', SERVICES_FACTORY=None)
+    app.config.from_mapping({name: os.environ.get(name, '') for name in (
+        'GOOGLE_CLOUD_PROJECT', 'SCHEDULER_LOCATION', 'SCHEDULER_JOB_NAME',
+    )})
+    scheduler_logger = logging.getLogger('web_monitor.scheduling')
+    scheduler_logger.setLevel(logging.INFO)
+    if not scheduler_logger.handlers:
+        scheduler_logger.addHandler(default_handler)
     if config:
         app.config.update(config)
 
@@ -63,6 +74,32 @@ def create_app(config: dict | None = None, *, services=None) -> Flask:
     @app.get('/health')
     def health():
         return {'service': 'web-monitor', 'status': 'ok'}
+
+    @app.post('/tasks/monitor')
+    def scheduled_monitoring():
+        # These headers identify work, not its caller. app.yaml login: admin
+        # provides the documented App Engine-target authorization boundary.
+        try:
+            invocation = SchedulerInvocation.from_headers(
+                request.headers, project=app.config['GOOGLE_CLOUD_PROJECT'],
+                location=app.config['SCHEDULER_LOCATION'],
+                job_name=app.config['SCHEDULER_JOB_NAME'],
+            )
+        except InvalidInvocation as error:
+            # Only fixed error categories and shape flags, never header values.
+            job = request.headers.get('X-CloudScheduler-JobName', '')
+            time_value = request.headers.get('X-CloudScheduler-ScheduleTime', '')
+            app.logger.warning(
+                'Scheduler identity rejected: category=%s job_present=%s short_job=%s time_present=%s',
+                str(error), bool(job), '/' not in job if job else False, bool(time_value),
+            )
+            return {'error': 'Invalid scheduler invocation'}, 400
+        scheduler = dependencies().scheduler
+        if scheduler is None:
+            abort(503)
+        results = scheduler.run(invocation)
+        return {'invocation': invocation.key, 'completed': len(results),
+                'reused': sum(result.reused for result in results)}
 
     @app.get('/')
     def index():
@@ -141,7 +178,10 @@ def create_app(config: dict | None = None, *, services=None) -> Flask:
         status = error.status if isinstance(error, ActivityInfoError) else None
         app.logger.error('Web query failed: category=%s upstream_status=%s',
                          type(error).__name__, status)
+        # App Engine targets retry HTTP 503 outside the configured retry count.
+        # Use 500 for failed scheduled work so the conservative policy applies.
+        code = 500 if request.path == '/tasks/monitor' else 503
         return render_template('error.html', title='History unavailable',
-                               message='Monitoring data could not be loaded. Please try again later.'), 503
+                               message='Monitoring data could not be loaded. Please try again later.'), code
 
     return app

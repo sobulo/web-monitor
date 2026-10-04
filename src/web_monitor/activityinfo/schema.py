@@ -12,6 +12,7 @@ FORM_LABELS = {
     "crawl": "Crawl",
 }
 STATUS_VALUES = ("initial", "no_change", "changed", "error")
+SCHEDULER_FIELDS = frozenset({"scheduler_invocation", "scheduled_at"})
 
 
 class SchemaError(ValueError):
@@ -81,6 +82,7 @@ def expected_schemas(database_id: str) -> dict[str, dict]:
                 "added_count", "removed_count", "changed_count", "pages_crawled",
             )],
             field("crawl", "error_message", "NARRATIVE", required=False),
+            *[field("crawl", code, required=False) for code in sorted(SCHEDULER_FIELDS)],
         ],
     }
     schemas = {
@@ -130,6 +132,8 @@ def verify_schema(actual: dict, expected: dict, *, allow_missing=False) -> list[
             continue
         if found.get("type") != wanted["type"]:
             raise SchemaError(f"Incompatible field type: {expected['label']}.{code}")
+        if code in SCHEDULER_FIELDS and found.get("required", False):
+            raise SchemaError(f"Scheduler provenance must remain optional: {code}")
         parameters = found.get("typeParameters", {})
         expected_parameters = wanted.get("typeParameters", {})
         if not isinstance(parameters, dict):
@@ -157,7 +161,8 @@ def verify_schema(actual: dict, expected: dict, *, allow_missing=False) -> list[
     return missing
 
 
-def inspect_schema(client: ActivityInfoClient, *, allow_missing=False) -> dict[str, dict]:
+def inspect_schema(client: ActivityInfoClient, *, allow_missing=False,
+                   allow_legacy_scheduler=False) -> dict[str, dict]:
     """Preflight every application resource before any bootstrap write."""
     expected = expected_schemas(client.database_id)
     tree = client.get_database()
@@ -189,7 +194,12 @@ def inspect_schema(client: ActivityInfoClient, *, allow_missing=False) -> dict[s
         if resource.get("type") != kind or resource.get("parentId") != parent:
             raise SchemaError(f"Incompatible resource type/parent: {code}")
         schema = client.get_schema(wanted["id"])
-        verify_schema(schema, wanted, allow_missing=allow_missing)
+        missing = verify_schema(schema, wanted, allow_missing=allow_missing or allow_legacy_scheduler)
+        if not allow_missing and any(
+            not (allow_legacy_scheduler and code == "crawl" and f["code"] in SCHEDULER_FIELDS)
+            for f in missing
+        ):
+            raise SchemaError("Missing application fields; run bootstrap")
         actual[code] = schema
     if "snapshot_item" in actual:
         if "snapshot" not in actual:

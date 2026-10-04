@@ -1,3 +1,21 @@
-# Configuration for a future App Engine Standard deployment.
 runtime: python311
-entrypoint: gunicorn --pythonpath src --bind :$PORT main:app
+entrypoint: gunicorn --pythonpath src --bind :$PORT --workers 1 --threads 4 --timeout 600 main:app
+instance_class: F1
+automatic_scaling:
+  min_instances: 0
+  max_instances: 1
+env_variables:
+  ACTIVITYINFO_DATABASE_ID: "cfx7vfgmuttn7403"
+  ACTIVITYINFO_SINGLE_EMBED_URL: "https://www.activityinfo.org/published/wcf0a4c8a958fedf369d1a6e7?embed=true"
+  ACTIVITYINFO_NOTEBOOK_PUBLIC_URL: "https://www.activityinfo.org/published/w2abac0771aa1973c7b36d56c"
+  ACTIVITYINFO_SECRET_VERSION: "1"
+  SCHEDULER_JOB_NAME: "web-monitor-daily"
+  SCHEDULER_LOCATION: "europe-west1"
+handlers:
+  - url: /tasks/monitor
+    script: auto
+    login: admin
+    secure: always
+  - url: /.*
+    script: auto
+    secure: always

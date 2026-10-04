@@ -216,3 +216,18 @@ def test_setup_accepts_content_refinement_but_web_validation_is_strict(api, sche
     publisher._validate_report(old, report, check_components=False)
     with pytest.raises(ReportValidationError):
         publisher._validate_report(old, report)
+
+
+def test_source_form_order_is_not_semantic_but_membership_is(api, schemas):
+    publisher = ActivityInfoReportPublisher(api.client, schemas)
+    for report in publisher.definitions:
+        actual = response(report, True)
+        actual['sources']['forms'].reverse()
+        before = deepcopy(actual)
+        publisher._validate_report(actual, report, published=True)
+        publisher._validate_report(actual, report, check_components=False)
+        assert actual == before
+        for forms in ([report['sources']['forms'][0]] * 2, ['anotherform'], [None]):
+            actual['sources']['forms'] = forms
+            with pytest.raises(ReportValidationError):
+                publisher._validate_report(actual, report)

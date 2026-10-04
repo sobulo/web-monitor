@@ -11,6 +11,7 @@ from web_monitor.activityinfo.persistence import ActivityInfoPersistence, Monito
 from web_monitor.history import HistoryService
 from web_monitor.reporting import ReportingService
 from web_monitor.activityinfo.reporting import ActivityInfoReportPublisher
+from web_monitor.scheduling import ScheduledMonitoringService
 
 
 class SiteDirectory(Protocol):
@@ -24,6 +25,7 @@ class WebServices:
     history: HistoryService
     reporting: ReportingService | None = None
     report_provider: ActivityInfoReportPublisher | None = None
+    scheduler: ScheduledMonitoringService | None = None
 
 
 @contextmanager
@@ -32,4 +34,5 @@ def configured_services(env_file: Path):
     with ActivityInfoClient(config) as client:
         store = ActivityInfoPersistence(client)
         yield WebServices(store, HistoryService(store), ReportingService(store),
-                          ActivityInfoReportPublisher(client, store.schemas))
+                          ActivityInfoReportPublisher(client, store.schemas),
+                          ScheduledMonitoringService(store))

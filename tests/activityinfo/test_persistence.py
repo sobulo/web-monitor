@@ -183,3 +183,55 @@ def test_list_crawls_rejects_duplicates(api, schemas):
     api.expect('POST', '/query/rows', [{'record_id': 'crawl1'}] * 2)
     with pytest.raises(PersistenceError, match='Duplicate Crawl'):
         store.list_crawls('site1')
+
+
+def test_scheduler_provenance_round_trip(api, schemas, record_response):
+    store = ActivityInfoPersistence(api.client, schemas)
+    record = CrawlRecord('scheduled1', 'site1', NOW, 'error',
+                         scheduler_invocation='invocation1', scheduled_at=NOW)
+    api.expect('POST', '/update', {})
+    store.create_crawl(record)
+    values = api.calls[-1].body['changes'][0]['fields']
+    assert values['scheduler_invocation'] == 'invocation1'
+    assert values['scheduled_at'] == timestamp(NOW)
+    api.expect('GET', f"/form/{schemas['crawl']['id']}/record/scheduled1",
+               record_response('crawl', 'scheduled1', values))
+    assert store.read_crawl('scheduled1') == record
+
+
+def test_legacy_schema_supports_manual_writes_but_not_scheduler(api, schemas):
+    from copy import deepcopy
+    legacy = deepcopy(schemas)
+    legacy['crawl']['elements'] = [f for f in legacy['crawl']['elements']
+                                   if f['code'] not in {'scheduler_invocation', 'scheduled_at'}]
+    store = ActivityInfoPersistence(api.client, legacy)
+    api.expect('POST', '/update', {})
+    store.create_crawl(CrawlRecord('manual1', 'site1', NOW, 'error'))
+    with pytest.raises(PersistenceError, match='run bootstrap'):
+        store.create_crawl(CrawlRecord('scheduled1', 'site1', NOW, 'error',
+                                      scheduler_invocation='invocation1', scheduled_at=NOW))
+
+
+def test_find_crawl_only_treats_404_as_absent(api, schemas):
+    from web_monitor.activityinfo.client import ActivityInfoError
+    store = ActivityInfoPersistence(api.client, schemas)
+    path = f"/form/{schemas['crawl']['id']}/record/crawl1"
+    api.expect('GET', path, {}, status=404)
+    assert store.find_crawl('crawl1') is None
+    api.expect('GET', path, {}, status=503)
+    with pytest.raises(ActivityInfoError):
+        store.find_crawl('crawl1')
+
+
+def test_find_snapshot_does_not_hide_missing_children(api, schemas, record_response):
+    store = ActivityInfoPersistence(api.client, schemas)
+    path = f"/form/{schemas['snapshot']['id']}/record/snapshot1"
+    raw = record_response('snapshot', 'snapshot1', {
+        'monitored_site': schemas['monitored_site']['id'] + ':site1',
+        'created_at': timestamp(NOW), 'effective_from': timestamp(NOW), 'item_count': 1,
+    })
+    api.expect('GET', path, raw)
+    api.expect('GET', path, raw)
+    api.expect('POST', '/query/rows', [])
+    with pytest.raises(PersistenceError, match='Incomplete'):
+        store.find_snapshot('snapshot1')

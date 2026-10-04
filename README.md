@@ -5,7 +5,7 @@ Includes a Flask web interface, local monitoring engine, and ActivityInfo histor
 
 ## Run locally
 
-Use Python 3.11 or newer (the future App Engine configuration targets 3.11).
+Use Python 3.11 or newer (App Engine targets 3.11).
 
 ```sh
 cd /Users/olusegunsobulo/Documents/projects/web-monitor
@@ -40,11 +40,11 @@ python -c "import web_monitor; from web_monitor.app import create_app; print(cre
 - `main.py`: local development and WSGI entry point.
 - `tests/`: Flask smoke test and controlled local monitoring fixtures/tests.
 - `requirements.txt`: runtime dependencies, also read by `pyproject.toml`.
-- `app.yaml`: future App Engine Standard runtime and Gunicorn entry point.
+- `app.yaml`: production App Engine Standard runtime and Gunicorn entry point.
 - `.gcloudignore`: upload exclusions, including local environments and secrets.
 - [Architecture](docs/architecture.md): scope, concepts, and integration boundaries.
 
-The `src` layout requires installing the package for local imports. The future
+The `src` layout requires installing the package for local imports. The
 Gunicorn entry point explicitly includes `src` on its Python path because
 App Engine installs runtime dependencies from `requirements.txt`.
 See Google's [Python runtime documentation](https://docs.cloud.google.com/appengine/docs/standard/python3/runtime).
@@ -121,8 +121,8 @@ test records. It leaves the site configuration intact:
 python -m web_monitor.activityinfo.verify_lifecycle <monitored-site-record-id>
 ```
 
-Deployment, scheduling, reports, and notifications are not implemented.
-The web interface is read-only; monitoring remains developer-triggered.
+The browser interface remains read-only. Scheduled monitoring is described in
+Stage 7 below; manual monitoring remains available to developers.
 
 ## Historical queries (Stage 4)
 
@@ -149,14 +149,14 @@ Run `python -m pytest` for offline route/template and regression tests. With the
 development `.env` configured, `python -m web_monitor.activityinfo.verify_web`
 starts a temporary local Flask server, verifies the four seeded sites and history
 pages using synthetic records, then cleans up those records. It leaves the seeded
-site configurations unchanged. No web route creates records or triggers crawls.
+site configurations unchanged. No browser UI route creates records or triggers crawls.
 
 ## Reporting (Stage 6)
 
 Stage 6 passed populated-data verification and user visual acceptance on
 2026-10-04. Synthetic records were removed; the four seeded sites and both
 published report definitions remain intact. Deployment readiness is a separate
-Stage 6.5 review; no deployment has been performed.
+Stage 6.5 review, now complete. Production deployment is described in Stage 7.
 
 ```sh
 python -m web_monitor.activityinfo.reporting
@@ -181,3 +181,51 @@ or `pytest` for the complete regression suite.
 
 For the retained three-site dataset and expected chart values, see
 [populated reporting acceptance](docs/reporting-acceptance.md).
+
+
+## Production and daily monitoring (Stage 7)
+
+Stage 7 deployed and passed production verification on 2026-10-04. Production
+uses the separate ActivityInfo DB configured in `app.yaml`; local `.env` remains
+unchanged and continues to use development data. No development history is copied.
+
+Publication uses two passes: bootstrap and publish the production Single/Notebook
+reports, then **stop** for their exact ActivityInfo-generated iframe source and
+standalone URL. After those values are supplied and validated, add them to
+`app.yaml`, recheck the intended `gcloud` account/project, and deploy with
+`gcloud app deploy app.yaml`. Both publication passes are complete.
+
+App Engine Standard uses Python 3.11, the default service, F1, and automatic
+scaling with zero minimum/one maximum instance. Google supplies the project ID;
+it is not application configuration. Secret Manager supplies `activityinfo-api-token`
+lazily. Production pins the newest enabled version (`ACTIVITYINFO_SECRET_VERSION`)
+at bootstrap, so its service account needs only Secret Accessor. For rotation,
+select a new enabled version and redeploy the updated version setting. Explicit
+`ACTIVITYINFO_API_TOKEN` still wins; imports and `/health` never access secrets.
+Local `.env` is neither uploaded nor loaded in the App Engine runtime.
+
+Production has one Cloud Scheduler **App Engine target**, `web-monitor-daily`,
+in `europe-west1` (the same region App Engine calls `europe-west`), daily at
+`00:00 UTC`, calling `POST /tasks/monitor`. This replaces
+legacy cron; no `cron.yaml` is used. The handler processes active `daily` sites.
+Recorded crawl errors still acknowledge successfully; infrastructure failures
+return 5xx. Same-job/same-time retries reuse completed Crawls without recrawling.
+Incomplete Snapshot writes require inspection; see the architecture retry limits.
+The handler is protected with App Engine `login: admin`, without adding UI login.
+
+Run all offline checks with `python -m pytest`. The suite mocks Secret Manager
+and exercises first delivery, retries, partial failure, and saved-state recovery.
+
+The Scheduler job allows three retries, starting at 60 seconds, with a ten-minute
+attempt deadline. App Engine manual-run requests were observed to omit the
+required schedule-time header and are rejected. To verify a real delivery without
+waiting until midnight, temporarily schedule the existing job for a near-term
+clock time and restore `0 0 * * *` afterward; do not substitute a fabricated
+identity. Retry verification replays the recorded job/time against the same
+production records with crawling and writes disabled.
+
+The first genuine scheduled delivery recorded four Crawls: three baselines
+(Python.org, Python Insider, IANA Reserved Domains) and one IMDb crawl error.
+It created three Snapshots/items. The five native report analyses matched those
+records, the deployed history/report pages rendered them, and replay reused all
+four Crawls without crawling or writing. All 269 offline tests passed.

@@ -92,3 +92,36 @@ def test_incompatible_existing_field_prevents_all_writes(api, schemas, tree):
     with pytest.raises(SchemaError, match="Incompatible"):
         bootstrap(api.client)
     assert all(call.request.method == "GET" for call in api.calls)
+
+
+def test_optional_scheduler_migration_preserves_existing_fields(api, schemas, expect_inspection, record_response):
+    legacy = deepcopy(schemas)
+    legacy['crawl']['elements'] = [f for f in legacy['crawl']['elements']
+                                  if f['code'] not in {'scheduler_invocation', 'scheduled_at'}]
+    original = deepcopy(legacy['crawl'])
+    records = seed_records(schemas, record_response)
+    expect_inspection(actual=legacy)
+    for code, schema in legacy.items():
+        path = f"/form/{schema['id']}/schema"
+        if code == 'crawl':
+            api.expect('POST', path, {})
+        api.expect('GET', path, schemas[code])
+    expect_inspection()
+    expect_sites(api, schemas, records)
+    expect_sites(api, schemas, records)
+    result = bootstrap(api.client)
+    assert result.added_fields == 2 and result.seeded_sites == 0 and not result.created_forms
+    mutations = [c for c in api.calls if c.request.method == 'POST' and not c.request.url.endswith('/query/rows')]
+    assert len(mutations) == 1
+    updated = mutations[0].body
+    assert updated['elements'][:len(original['elements'])] == original['elements']
+    assert all(not f['required'] for f in updated['elements'][len(original['elements']):])
+
+
+def test_required_scheduler_field_is_incompatible(api, schemas, expect_inspection):
+    broken = deepcopy(schemas)
+    next(f for f in broken['crawl']['elements'] if f['code'] == 'scheduled_at')['required'] = True
+    expect_inspection(actual=broken)
+    with pytest.raises(SchemaError, match='optional'):
+        bootstrap(api.client)
+    assert all(c.request.method == 'GET' for c in api.calls)
