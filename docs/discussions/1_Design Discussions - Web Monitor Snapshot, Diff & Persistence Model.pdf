@@ -1,0 +1,352 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Count 3 /Kids [ 5 0 R 7 0 R 9 0 R ] >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Length 2370 >>
+stream
+BT
+/F1 9 Tf
+12 TL
+54 738 Td
+(?Design Discussions - Web Monitor Snapshot, Diff & Persistence Model) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Purpose) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Capture the design decision that emerged while comparing the monitoring policies described) Tj
+T*
+(in the 2004 thesis with the behavior that actually survives in the Perl code, and translate) Tj
+T*
+(that into a modern persistence model for web-monitor.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Historical observations) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(The thesis describes two caching policies. The archive policy stores timestamped snapshots) Tj
+T*
+(at regular intervals whether or not anything changed; this preserves full history and) Tj
+T*
+(supports arbitrary historical comparisons, but duplicates unchanged state. The overwrite) Tj
+T*
+(policy stores a new copy only when content changes; this saves space, but the thesis) Tj
+T*
+(explicitly notes that history is lost because the previous cached state is overwritten.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(The recovered Perl strongly supports the researcher-domain archive path: timestamped) Tj
+T*
+(snapshots can be written, reloaded, compared, and reported. Only low-level raw-cache helpers) Tj
+T*
+(survive for the overwrite path; the course-domain comparison logic and conditional-overwrite) Tj
+T*
+(orchestration are not present in Appendix A.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(This matters for the modern port. Recreating only the fully recovered archive behavior would) Tj
+T*
+(preserve what survived in code, but it would underuse an important design idea that was) Tj
+T*
+(discussed in the thesis and only partially preserved in the implementation.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Decision for web-monitor) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(web-monitor will combine the useful properties of both historical policies.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Every scheduled crawl is recorded, but a new full snapshot is persisted only when the) Tj
+T*
+(observed state differs from the most recent stored state.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(A crawl with no change records that the site was checked at that time and still maps to the) Tj
+T*
+(existing snapshot. A crawl that finds a change creates a new snapshot and records the) Tj
+T*
+(transition from the previous state to the new one.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(This avoids storing duplicate full snapshots on every crawl while still preserving) Tj
+T*
+(historical state.) Tj
+T*
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 4 0 R >>
+endobj
+6 0 obj
+<< /Length 1752 >>
+stream
+BT
+/F1 9 Tf
+12 TL
+54 738 Td
+() Tj
+T*
+() Tj
+T*
+(The practical effect is that a snapshot represents a distinct observed state, while crawl) Tj
+T*
+(records establish when that state was known to be current.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Examples of questions this model supports) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+("State on September 16" resolves to the latest snapshot known to be in effect on September) Tj
+T*
+(16, supported by the crawl record for that date.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+("What changed on September 16?" resolves to the change detected by that crawl, or "no) Tj
+T*
+(change" if the crawl mapped to the existing state.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+("What changed between September 16 and September 18?" resolves the state in effect at each) Tj
+T*
+(date and compares those two states.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(This is more direct than the historical overwrite policy, which loses prior state, and more) Tj
+T*
+(storage-efficient than the archive policy, which stores duplicate state even when nothing) Tj
+T*
+(changes.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Persisted model) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Monitor) Tj
+T*
+(- URL and crawl configuration such as depth, allow/domain restrictions, schedule, and active) Tj
+T*
+(status.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Crawl) Tj
+T*
+(- monitor) Tj
+T*
+(- crawled_at) Tj
+T*
+(- result/status: changed, no_change, or error) Tj
+T*
+(- snapshot representing the state observed during the crawl) Tj
+T*
+(- operational metadata such as pages crawled and failure details) Tj
+T*
+(- when changed, references/counts describing the transition from the prior snapshot) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Snapshot) Tj
+T*
+(- monitor) Tj
+T*
+(- created_at / effective_from) Tj
+T*
+(- item count) Tj
+T*
+(- one record only for each distinct observed state) Tj
+T*
+() Tj
+T*
+ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 6 0 R >>
+endobj
+8 0 obj
+<< /Length 2053 >>
+stream
+BT
+/F1 9 Tf
+12 TL
+54 738 Td
+() Tj
+T*
+(Snapshot Item) Tj
+T*
+(- snapshot) Tj
+T*
+(- URL) Tj
+T*
+(- title or description) Tj
+T*
+(- content hash and other normalized fields needed for comparison) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(A separate Change Event form is optional rather than required for the first implementation.) Tj
+T*
+(A changed Crawl can initially carry the prior/new snapshot references and) Tj
+T*
+(added/removed/changed counts; this keeps the ActivityInfo model smaller while preserving the) Tj
+T*
+(conceptual distinction between a crawl, a state, and a change.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(ActivityInfo mapping) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(ActivityInfo is the persistent structured-data layer rather than the crawler or diff engine.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(A minimal mapping is:) Tj
+T*
+(- Monitor as a top-level form) Tj
+T*
+(- Crawls as repeatable records associated with a monitor) Tj
+T*
+(- Snapshots as distinct state records associated with a monitor) Tj
+T*
+(- Snapshot Items as a subform/child collection of a snapshot) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(The Python application performs crawling, normalization, state comparison, and historical) Tj
+T*
+(state resolution. ActivityInfo persists the resulting monitor configuration, crawl history,) Tj
+T*
+(distinct snapshots, snapshot items, and summary counts. Its reporting layer can then) Tj
+T*
+(summarize crawl frequency, change frequency, last crawl, last change, and related) Tj
+T*
+(operational history.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Design consequence) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(The modern system is not a line-for-line Perl port. It preserves the historical monitoring) Tj
+T*
+(ideas while making the storage model more explicit.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(The incomplete recovery of the overwrite-policy implementation is useful context rather than) Tj
+T*
+(a gap to hide: web-monitor brings that thesis-level design discussion back into the) Tj
+T*
+(implementation and combines it with the fully recovered archive behavior in a way that) Tj
+T*
+(supports both efficient persistence and historical queries.) Tj
+T*
+ET
+endstream
+endobj
+9 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 8 0 R >>
+endobj
+xref
+0 10
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000129 00000 n 
+0000000199 00000 n 
+0000002620 00000 n 
+0000002746 00000 n 
+0000004549 00000 n 
+0000004675 00000 n 
+0000006779 00000 n 
+trailer
+<< /Size 10 /Root 1 0 R >>
+startxref
+6905
+%%EOF
