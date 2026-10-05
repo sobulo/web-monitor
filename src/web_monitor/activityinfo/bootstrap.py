@@ -20,7 +20,7 @@ from web_monitor.models import MonitoredSite
 DEMO_SITES = (
     ("Python.org", "https://www.python.org/"),
     ("Python Insider", "https://blog.python.org/"),
-    ("IMDb Top 250", "https://www.imdb.com/chart/top/"),
+    ("Planet Python", "https://planetpython.org/"),
     ("IANA Reserved Domains", "https://www.iana.org/domains/reserved"),
 )
 
