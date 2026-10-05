@@ -37,7 +37,7 @@ See [Architecture](docs/architecture.md) for the system design and integration b
 
 ## Notes
 
-- This project was inspired by my 2004 Perl web-monitor thesis implementation, preserved in the [historical repository](https://github.com/sobulo/sobulo-web-monitor-2004).
+- This project was inspired by my 2004 Perl web-monitor thesis implementation, preserved in this [historical repository](https://github.com/sobulo/sobulo-web-monitor-2004).
 - Both repositories are collaborative technical endeavors between Segun Sobulo, ChatGPT, and Codex.
 - The modern rebuild came together over a weekend, with plenty of TV breaks and broader conversations about my Fall 2027 goals mixed in; I was impressed by what the assistants produced.
 - We regularly had to reel one another back from useful tangents. The verbose conversations were distilled into technical discussion documents; the archive does not include Codex prompts. See [`docs/discussions/`](docs/discussions/).
