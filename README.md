@@ -1,231 +1,51 @@
 # Web Monitor
 
-A modern Python implementation inspired by the 2004 monitoring system.
-Includes a Flask web interface, local monitoring engine, and ActivityInfo history.
+A modern Python implementation inspired by the 2004 monitoring system. Includes a Flask web interface, local monitoring engine, and ActivityInfo history.
+
+**Live application:** https://web-monitor-510601.ew.r.appspot.com/
 
 ## Run locally
 
-Use Python 3.11 or newer (App Engine targets 3.11).
+Requires Python 3.11 or newer.
 
 ```sh
-cd /Users/olusegunsobulo/Documents/projects/web-monitor
+git clone https://github.com/sobulo/web-monitor.git
+cd web-monitor
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e '.[test]'
 python main.py
 ```
 
-For the real web interface, configure the existing development ActivityInfo database
-and token in the ignored project-root `.env` (see `.env.example` and bootstrap below).
-Open <http://127.0.0.1:8080/> to choose a Monitored Site, inspect recent Crawls,
-view state or changes on a date, compare dates, and view the latest change.
-Historical dates are UTC; GET result URLs can be bookmarked. Stop with Ctrl-C.
+For the ActivityInfo-backed interface, configure the development database and token in an ignored project-root `.env` file. See [prerequisites](docs/prerequisite.md) for the one-time setup.
 
-`/health` returns `{"service":"web-monitor","status":"ok"}` without credentials.
-Offline tests and the local engine also need no credentials. The real UI and
-ActivityInfo commands load `.env` explicitly; environment variables take precedence.
+## Run on App Engine
+
+After completing the [prerequisites](docs/prerequisite.md):
+
+```sh
+gcloud app deploy app.yaml
+gcloud app browse
+```
+
+- App Engine Standard runs the Flask application; production secrets come from Google Cloud Secret Manager.
+- Cloud Scheduler invokes the monitoring endpoint daily.
 
 ## Verify
-
-With the virtual environment active:
 
 ```sh
 python -m pytest
 python -c "import web_monitor; from web_monitor.app import create_app; print(create_app().name)"
 ```
 
-## Layout and configuration
+## Project documentation
 
-- `src/web_monitor/`: installed application package and Flask factory.
-- `main.py`: local development and WSGI entry point.
-- `tests/`: Flask smoke test and controlled local monitoring fixtures/tests.
-- `requirements.txt`: runtime dependencies, also read by `pyproject.toml`.
-- `app.yaml`: production App Engine Standard runtime and Gunicorn entry point.
-- `.gcloudignore`: upload exclusions, including local environments and secrets.
-- [Architecture](docs/architecture.md): scope, concepts, and integration boundaries.
+The [architecture notes](docs/architecture.md) describe the monitoring model, persistence and reporting boundaries, and production runtime. Development followed a deliberately staged execution sequence retained under `docs/`.
 
-The `src` layout requires installing the package for local imports. The
-Gunicorn entry point explicitly includes `src` on its Python path because
-App Engine installs runtime dependencies from `requirements.txt`.
-See Google's [Python runtime documentation](https://docs.cloud.google.com/appengine/docs/standard/python3/runtime).
-No cloud resources are created or deployed in Stage 0.
+## Notes
 
-## Stage 1 tests
-
-With the virtual environment active, install the test dependencies and run:
-
-```sh
-python -m pip install -e '.[test]'
-python -m pytest tests/test_crawler.py tests/test_normalization.py tests/test_diff.py tests/test_urls.py
-python -m pytest
-```
-
-The fixtures run on an ephemeral local HTTP server. No internet or credentials
-are required to run the tests; the full suite includes the Stage 0 Flask smoke test.
-
-## ActivityInfo bootstrap (Stage 2)
-
-Use an **existing development database**. From this project root, set
-`ACTIVITYINFO_API_TOKEN` and `ACTIVITYINFO_DATABASE_ID` in the ignored `.env`
-(using `.env.example` as a guide), then run with the virtual environment active:
-
-```sh
-python -m pip install -e '.[test]'
-python -m web_monitor.activityinfo.bootstrap
-```
-
-Bootstrap creates/verifies the application forms inside that database and seeds
-four demo site configurations. It never creates a database or crawls the sites.
-Rerunning it adds only missing schema/seed records; incompatible objects stop it.
-Run bootstrap serially, not concurrently. Never share or commit `.env`.
-
-Offline tests require no ActivityInfo credentials:
-
-```sh
-python -m pytest
-```
-
-The explicit **development-only** integration checkpoint bootstraps twice, checks
-for duplicates, writes/reads synthetic Snapshot, child items, and Crawl records,
-then deletes only those generated test records:
-
-```sh
-python -m web_monitor.activityinfo.verify_persistence
-```
-
-It prints generated test record IDs so interrupted checks can be inspected.
-Both commands accept `--env-file /absolute/path/to/.env`. The token is never
-included in command output. Do not run the checkpoint against production data.
-
-## Run one monitored site (Stage 3)
-
-With the existing ActivityInfo configuration and virtual environment active, run
-one Monitored Site by its ActivityInfo record ID:
-
-```sh
-python -m web_monitor.monitor <monitored-site-record-id>
-```
-
-The command prints the status, Crawl/Snapshot IDs, page count, and diff counts.
-Initial runs establish a baseline with zero diff counts. Unchanged runs reuse
-that Snapshot; changed runs save a complete new state. Failed crawls save an
-error Crawl without a Snapshot. Exit codes: `0` success, `1` recorded crawl error,
-`2` configuration/persistence failure. Run attempts for a site serially.
-Manual runs are explicit: scheduling and the `active` flag do not trigger them.
-
-The optional development checkpoint runs the same command twice against a site
-with no previous Snapshot, verifies the records, and deletes only its generated
-test records. It leaves the site configuration intact:
-
-```sh
-python -m web_monitor.activityinfo.verify_lifecycle <monitored-site-record-id>
-```
-
-The browser interface remains read-only. Scheduled monitoring is described in
-Stage 7 below; manual monitoring remains available to developers.
-
-## Historical queries (Stage 4)
-
-With the existing development `.env` and virtual environment active, query a
-Monitored Site record ID. Dates are UTC; commands are read-only:
-
-```sh
-python -m web_monitor.history state <site-id> 2026-09-16
-python -m web_monitor.history changes-on <site-id> 2026-09-17
-python -m web_monitor.history changes-between <site-id> 2026-09-14 2026-09-19
-python -m web_monitor.history latest-change <site-id>
-python -m web_monitor.history recent <site-id> --limit 20
-```
-
-Missing state or changes are reported explicitly. Date comparisons use the last
-successful observation through each UTC date, including unchanged observations.
-Run offline coverage with `python -m pytest`. The explicit development checkpoint
-`python -m web_monitor.activityinfo.verify_history` writes synthetic history,
-verifies all five queries, and deletes its generated records, preserving the seeds.
-
-## Web interface verification (Stage 5)
-
-Run `python -m pytest` for offline route/template and regression tests. With the
-development `.env` configured, `python -m web_monitor.activityinfo.verify_web`
-starts a temporary local Flask server, verifies the four seeded sites and history
-pages using synthetic records, then cleans up those records. It leaves the seeded
-site configurations unchanged. No browser UI route creates records or triggers crawls.
-
-## Reporting (Stage 6)
-
-Stage 6 passed populated-data verification and user visual acceptance on
-2026-10-04. Synthetic records were removed; the four seeded sites and both
-published report definitions remain intact. Deployment readiness is a separate
-Stage 6.5 review, now complete. Production deployment is described in Stage 7.
-
-```sh
-python -m web_monitor.activityinfo.reporting
-python main.py
-```
-
-Open <http://127.0.0.1:8080/reports> for monitoring totals and the ActivityInfo
-visualization. Setup maintains two deterministic database-owned reports: the
-**Monitoring Overview** Notebook for detail and **Monitoring Activity** Single
-bar chart for embedding. Reruns update the same reports. Publishing requires
-ActivityInfo's **Publish reports** permission; setup never changes permissions.
-
-Set `ACTIVITYINFO_SINGLE_EMBED_URL` to the exact iframe `src` copied from the
-Single report's **Sharing & Publishing → Publishing** screen, and
-`ACTIVITYINFO_NOTEBOOK_PUBLIC_URL` to the Notebook's standalone published URL.
-Keep these in local `.env`. The adapter validates the host and report identity;
-URLs are never inferred. The local summary remains available if the provider
-cannot load. The Notebook opens through **View the full monitoring report**.
-
-Run the offline reporting tests with `pytest tests/test_reporting.py tests/activityinfo/test_reporting.py tests/test_reports_web.py`,
-or `pytest` for the complete regression suite.
-
-For the retained three-site dataset and expected chart values, see
-[populated reporting acceptance](docs/reporting-acceptance.md).
-
-
-## Production and daily monitoring (Stage 7)
-
-Stage 7 deployed and passed production verification on 2026-10-04. Production
-uses the separate ActivityInfo DB configured in `app.yaml`; local `.env` remains
-unchanged and continues to use development data. No development history is copied.
-
-Publication uses two passes: bootstrap and publish the production Single/Notebook
-reports, then **stop** for their exact ActivityInfo-generated iframe source and
-standalone URL. After those values are supplied and validated, add them to
-`app.yaml`, recheck the intended `gcloud` account/project, and deploy with
-`gcloud app deploy app.yaml`. Both publication passes are complete.
-
-App Engine Standard uses Python 3.11, the default service, F1, and automatic
-scaling with zero minimum/one maximum instance. Google supplies the project ID;
-it is not application configuration. Secret Manager supplies `activityinfo-api-token`
-lazily. Production pins the newest enabled version (`ACTIVITYINFO_SECRET_VERSION`)
-at bootstrap, so its service account needs only Secret Accessor. For rotation,
-select a new enabled version and redeploy the updated version setting. Explicit
-`ACTIVITYINFO_API_TOKEN` still wins; imports and `/health` never access secrets.
-Local `.env` is neither uploaded nor loaded in the App Engine runtime.
-
-Production has one Cloud Scheduler **App Engine target**, `web-monitor-daily`,
-in `europe-west1` (the same region App Engine calls `europe-west`), daily at
-`00:00 UTC`, calling `POST /tasks/monitor`. This replaces
-legacy cron; no `cron.yaml` is used. The handler processes active `daily` sites.
-Recorded crawl errors still acknowledge successfully; infrastructure failures
-return 5xx. Same-job/same-time retries reuse completed Crawls without recrawling.
-Incomplete Snapshot writes require inspection; see the architecture retry limits.
-The handler is protected with App Engine `login: admin`, without adding UI login.
-
-Run all offline checks with `python -m pytest`. The suite mocks Secret Manager
-and exercises first delivery, retries, partial failure, and saved-state recovery.
-
-The Scheduler job allows three retries, starting at 60 seconds, with a ten-minute
-attempt deadline. App Engine manual-run requests were observed to omit the
-required schedule-time header and are rejected. To verify a real delivery without
-waiting until midnight, temporarily schedule the existing job for a near-term
-clock time and restore `0 0 * * *` afterward; do not substitute a fabricated
-identity. Retry verification replays the recorded job/time against the same
-production records with crawling and writes disabled.
-
-The first genuine scheduled delivery recorded four Crawls: three baselines
-(Python.org, Python Insider, IANA Reserved Domains) and one IMDb crawl error.
-It created three Snapshots/items. The five native report analyses matched those
-records, the deployed history/report pages rendered them, and replay reused all
-four Crawls without crawling or writing. All 269 offline tests passed.
+1. This project was inspired by my 2004 Perl web-monitor thesis project, preserved in [sobulo-web-monitor-2004](https://github.com/sobulo/sobulo-web-monitor-2004).
+2. Both repositories are collaborative technical endeavors between me, ChatGPT, and Codex.
+3. Credit is hard to split cleanly; I was impressed by what the collaboration produced. The historical reconstruction and modern implementation came together over a weekend, with plenty of TV breaks and side conversations about my Fall 2027 plans.
+4. We also had to reel one another in from tangents. The [`docs/discussions/`](docs/discussions/) PDFs condense the technical discussions that shaped the implementation; they intentionally omit Codex prompts.
+5. A special nod to [Google Cloud](https://cloud.google.com/docs) and [ActivityInfo](https://www.activityinfo.org/support/docs/api/) for the technical and API documentation that supported the deployment and integration work. The resulting boundaries and tradeoffs are summarized in the [architecture notes](docs/architecture.md).
