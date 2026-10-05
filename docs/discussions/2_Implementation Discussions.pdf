@@ -1,0 +1,215 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Count 2 /Kids [ 5 0 R 7 0 R ] >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Length 2293 >>
+stream
+BT
+/F1 9 Tf
+12 TL
+54 738 Td
+(?Implementation Discussions) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. ActivityInfo authentication) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(web-monitor will use an ActivityInfo personal API token for authenticated access. The token) Tj
+T*
+(will not be stored in Git or hard-coded in the application.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(For local development, Codex can configure an ignored local environment file and wire the) Tj
+T*
+(application to read the token from an environment variable. For deployment, the token should) Tj
+T*
+(be stored in Google Cloud Secret Manager and read by the App Engine service at runtime.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(2. ActivityInfo schema and bootstrap) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(The ActivityInfo database structure should be created through the API as part of a one-time) Tj
+T*
+(bootstrap process rather than built manually.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(The initial schema will center on:) Tj
+T*
+(- Monitored Sites: URL, crawl depth, allow/domain restriction, schedule, and active status.) Tj
+T*
+(- Crawls: timestamp, status, observed snapshot, crawl metrics, and error/change information.) Tj
+T*
+(- Snapshots: one record for each distinct observed state.) Tj
+T*
+(- Snapshot Items: child/subform records containing the extracted items used to represent a) Tj
+T*
+(snapshot.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Snapshot Items should be implemented as an ActivityInfo subform of Snapshot. The bootstrap) Tj
+T*
+(should create the parent form, add the subform field, define the child schema, and then read) Tj
+T*
+(the resulting schemas back to verify the relationship.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(The bootstrap should also seed roughly three to four monitored sites chosen to demonstrate) Tj
+T*
+(different rates of change. The initial set should favor structured, crawlable public pages) Tj
+T*
+(over noisy commercial news homepages. Current candidates include Python.org, Python Insider,) Tj
+T*
+(IMDb Top 250, and a highly stable IANA page.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Runtime execution should only read and write records; schema creation and schema changes) Tj
+T*
+(remain explicit bootstrap/migration operations.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(3. Query interface and reporting) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(The monitoring process runs automatically on the backend. The web interface is for) Tj
+T*
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 4 0 R >>
+endobj
+6 0 obj
+<< /Length 1679 >>
+stream
+BT
+/F1 9 Tf
+12 TL
+54 738 Td
+(inspecting results and historical state, not for triggering the core diff process.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(The initial server-rendered interface can use ordinary HTML forms and date inputs, with) Tj
+T*
+(little or no JavaScript. Core queries should include:) Tj
+T*
+(- state on a selected date;) Tj
+T*
+(- what changed on a selected date;) Tj
+T*
+(- changes between two dates;) Tj
+T*
+(- latest change;) Tj
+T*
+(- recent crawl/change history.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Users choose a monitored site rather than a "monitor type." Date-based queries are preferred) Tj
+T*
+(to raw snapshot selection because the persistence model stores distinct states rather than a) Tj
+T*
+(full duplicate snapshot on every crawl.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(ActivityInfo remains the persistence and aggregate-reporting layer. web-monitor performs) Tj
+T*
+(crawling, normalization, state resolution, and detailed diffs.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(A published ActivityInfo Notebook/report should be created and published through the API) Tj
+T*
+(where possible. The application can retrieve the published report information and expose a) Tj
+T*
+(Reports page that embeds the published report, ideally through a simple iframe.) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(Future direction) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(AI-assisted semantic extraction is intentionally outside the first implementation. A later) Tj
+T*
+(enhancement could use AI to identify meaningful content beyond links, suppress cosmetic) Tj
+T*
+(changes, extract structured information, or summarize detected changes. This belongs in a) Tj
+T*
+(wishlist/future-work track after the deterministic monitoring pipeline is working.) Tj
+T*
+ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 6 0 R >>
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000123 00000 n 
+0000000193 00000 n 
+0000002537 00000 n 
+0000002663 00000 n 
+0000004393 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+4519
+%%EOF
