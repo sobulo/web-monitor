@@ -61,7 +61,7 @@ def crawl_site(site: MonitoredSite, *, timeout: float = DEFAULT_TIMEOUT) -> Snap
                             continue
                         response.raise_for_status()
                         if response.status_code != 200:
-                            raise CrawlError(f"Expected HTTP 200: {url}")
+                            raise requests.HTTPError("Expected HTTP 200", response=response)
                         content_type = response.headers.get("Content-Type", "")
                         media_type = content_type.split(";", 1)[0].strip().lower()
                         if media_type not in {"text/html", "application/xhtml+xml"}:

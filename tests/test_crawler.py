@@ -97,6 +97,16 @@ def test_timeout_is_explicit_and_wrapped(monkeypatch):
         crawl_site(MonitoredSite("http://127.0.0.1/"), timeout=0.25)
 
 
+@pytest.mark.parametrize("status", [202, 204, 403, 500])
+def test_rejected_http_status_is_structured(fixture_site, status):
+    fixture_site.routes["/"] = (status, {"Content-Type": "text/html"}, "")
+    with pytest.raises(CrawlError) as caught:
+        crawl_site(MonitoredSite(fixture_site.url))
+    cause = caught.value.__cause__
+    assert isinstance(cause, requests.HTTPError)
+    assert cause.response.status_code == status
+
+
 @pytest.mark.parametrize("timeout", [0, -1, float("inf"), float("nan")])
 def test_invalid_timeout_is_rejected(timeout):
     with pytest.raises(ValueError):

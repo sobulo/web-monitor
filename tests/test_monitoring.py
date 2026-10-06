@@ -131,6 +131,36 @@ def test_first_crawl_failure_does_not_create_baseline(store):
     assert "sensitive" not in result.crawl.error_message
 
 
+@pytest.mark.parametrize("status, content_type, expected", [
+    (202, "text/html", "Crawl failed because a required page returned HTTP 202."),
+    (403, "text/html", "Crawl failed because a required page returned HTTP 403."),
+    (200, "application/pdf", "A required page did not return HTML content."),
+    (200, "text/html", None),
+])
+def test_http_response_stores_only_safe_error_details(fixture_site, status, content_type, expected):
+    path = "/private?token=url-secret"
+    fixture_site.routes[path] = (
+        status,
+        {"Content-Type": content_type, "x-amzn-waf-action": "challenge-header-secret"},
+        "<html><body>body-secret</body></html>",
+    )
+    store = RecordingStore([
+        MonitoredSiteRecord("site1", "Local fixture", MonitoredSite(fixture_site.url + path)),
+    ])
+
+    result = MonitoringService(store).run("site1")
+
+    assert store.crawls == [result.crawl]
+    assert result.crawl.error_message == expected
+    assert result.crawl.status == ("initial" if expected is None else "error")
+    assert len(store.snapshots) == (1 if expected is None else 0)
+    if expected is not None:
+        assert all(detail not in result.crawl.error_message for detail in (
+            fixture_site.url, path, "url-secret", "x-amzn-waf-action",
+            "challenge-header-secret", "body-secret",
+        ))
+
+
 def test_failure_does_not_stop_next_successful_attempt(store, fixture_site):
     service = MonitoringService(store)
     first = service.run("site1")
